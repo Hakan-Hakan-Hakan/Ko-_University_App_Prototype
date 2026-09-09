@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 
 import 'account_preferences_service.dart';
+import 'guest_session.dart';
 
 class LocaleService extends ChangeNotifier {
   LocaleService({
@@ -49,6 +50,13 @@ class LocaleService extends ChangeNotifier {
 
   String? cachedLanguageFor(String userId) => _languageByUser[userId];
 
+  /// Guest sessions may flip this preference for the duration of the joyride,
+  /// but must not overwrite what the device owner chose.
+  Future<void> _persist(String key, Object? value) async {
+    if (guestSession.isActive) return;
+    await _box?.put(key, value);
+  }
+
   Future<void> setLanguage(
     String code, {
     bool persistToAccount = true,
@@ -57,7 +65,7 @@ class LocaleService extends ChangeNotifier {
     if (!_isSupported(code)) return;
     final changed = _languageCode != code;
     _languageCode = code;
-    await _box?.put('languageCode', code);
+    await _persist('languageCode', code);
     if (persistToAccount) {
       final accountId = _accountIdProvider?.call();
       if (accountId != null && accountId.isNotEmpty) {
@@ -85,7 +93,7 @@ class LocaleService extends ChangeNotifier {
     if (accountId != null && accountId.isNotEmpty && accountId != userId) {
       await _cacheLanguage(accountId, code);
     }
-    await _box?.put('languageCode', code);
+    await _persist('languageCode', code);
     notifyListeners();
   }
 
@@ -94,18 +102,15 @@ class LocaleService extends ChangeNotifier {
     final changed = _languageCode != code;
     _languageCode = code;
     await _cacheLanguage(userId, code);
-    await _box?.put('languageCode', code);
+    await _persist('languageCode', code);
     if (changed) notifyListeners();
   }
 
   Future<void> _cacheLanguage(String userId, String code) async {
     _languageByUser[userId] = code;
     _chosenLanguageUsers.add(userId);
-    await _box?.put(
-      'languageByUser',
-      Map<String, String>.from(_languageByUser),
-    );
-    await _box?.put('chosenLanguageUsers', _chosenLanguageUsers.toList());
+    await _persist('languageByUser', Map<String, String>.from(_languageByUser));
+    await _persist('chosenLanguageUsers', _chosenLanguageUsers.toList());
   }
 
   static bool _isSupported(String code) => code == 'en' || code == 'tr';

@@ -41,6 +41,8 @@ import 'create_event_screen.dart';
 import 'create_post_screen.dart';
 import 'notifications_screen.dart';
 import 'moderation_center_screen.dart';
+import '../services/guest_session.dart';
+import '../widgets/guest_notice_dialog.dart';
 
 class MainNavScreen extends ConsumerStatefulWidget {
   final bool isAdmin;
@@ -202,6 +204,20 @@ class _MainNavScreenState extends ConsumerState<MainNavScreen>
   // available as an explicit replay from Settings.
   Future<void> _startInitialExperience() async {
     if (!mounted) return;
+    // The exception is the guest joyride. First say plainly that the campus is
+    // fabricated — a visitor must not mistake the seeded students, clubs and
+    // messages for real ones, or think their likes were kept — and only then
+    // start the tour, which is the point of the visit and the one surface that
+    // walks every tab. `manual` is deliberate: it keeps
+    // `onboardingService.complete()` out of the picture and skips the calendar
+    // permission prompt an automatic run ends with, so the joyride leaves no
+    // trace on the visitor's device.
+    if (guestSession.isActive) {
+      await showGuestNoticeDialog(context);
+      if (!mounted) return;
+      _startOnboarding(TutorialLaunchSource.manual);
+      return;
+    }
     await _requestCalendarIfNeeded();
   }
 

@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'guest_session.dart';
 
 /// Tracks the two independent first-run milestones on this installation:
 /// whether the intro was viewed and whether an authenticated state was reached.
@@ -23,6 +24,7 @@ class OnboardingIntroService {
   }
 
   Future<void> markSeenOnDevice() async {
+    if (guestSession.isActive) return;
     if (_seen) return;
     _seen = true;
     final preferences = await SharedPreferences.getInstance();
@@ -30,6 +32,7 @@ class OnboardingIntroService {
   }
 
   Future<void> markCompletedOnDevice() async {
+    if (guestSession.isActive) return;
     if (_completed && _seen) return;
     _completed = true;
     _seen = true;

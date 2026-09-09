@@ -196,11 +196,11 @@ class StudentActivityService extends ChangeNotifier {
 
   /// The event's own accent when its creator picked one, else the club color.
   Color colorForEvent(Event event) {
-    final hex = event.accentColorHex;
-    if (hex != null && hex.trim().length == 8) {
-      final value = int.tryParse(hex.trim(), radix: 16);
-      if (value != null) return Color(value);
-    }
+    // Shared with EventDetailScreen, which used to read this column as bare
+    // `RRGGBB` while this read it as `AARRGGBB` — the same value could not
+    // satisfy both.
+    final accent = tryParseEventAccentColor(event.accentColorHex);
+    if (accent != null) return Color(accent);
     return colorForClubId(event.clubId);
   }
 

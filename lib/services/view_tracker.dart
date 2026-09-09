@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import '../models/user.dart';
 import 'mock_data.dart';
 import 'supabase_config.dart';
+import 'guest_session.dart';
 
 /// Tracks who has viewed each post or event.
 /// Key: contentId (postId or eventId)
@@ -20,6 +21,9 @@ class ViewTracker extends ChangeNotifier {
   final Map<String, int> _remotePostViewCounts = {};
 
   SupabaseClient? get _client {
+    // Guest mode reuses the unconfigured-backend path: with no client every
+    // remote read/write in this service degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     if (!SupabaseConfig.isConfigured) return null;
     // Test processes (flutter drive) don't run Supabase.initialize — treat an
     // uninitialized instance the same as "not configured".
@@ -39,6 +43,7 @@ class ViewTracker extends ChangeNotifier {
   // ── Record a view ─────────────────────────────────────────────────────────────
 
   void recordView(String contentId, String userId, {bool syncRemote = false}) {
+    if (guestSession.isActive) return;
     if (userId.isEmpty || !_initialized) return;
     final existing = _viewerIds(contentId);
     if (!existing.contains(userId)) {

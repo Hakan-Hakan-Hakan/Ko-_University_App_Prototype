@@ -5,7 +5,9 @@ import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
 import '../models/club.dart';
+import '../models/content_audience.dart';
 import '../models/event.dart';
+import '../services/content_visibility.dart';
 import '../services/locale_service.dart';
 import '../services/photo_file_cache.dart';
 import '../services/theme_service.dart';
@@ -13,6 +15,7 @@ import '../theme/specialized_semantic_palettes.dart';
 import '../services/user_state.dart';
 import 'app_network_image.dart';
 import 'clubup_design.dart';
+import 'content_audience_sheet.dart';
 import 'event_cover_image.dart';
 import 'loading_skeleton.dart';
 import 'user_avatar.dart';
@@ -946,6 +949,17 @@ class ProfileEventCard extends StatelessWidget {
                       weight: FontWeight.w600,
                       color: ProfileColors.accent,
                       gap: 4,
+                    ),
+                  ],
+                  // `ProfileColors` has no lifted accent-text token, so the
+                  // badge borrows the same `accent` the club line above it
+                  // already uses as text on this card.
+                  if (audienceForEvent(event) != ContentAudience.everyone) ...[
+                    const SizedBox(height: 6),
+                    ContentAudiencePill(
+                      key: ValueKey('content-audience-pill-${event.id}'),
+                      audience: audienceForEvent(event),
+                      accent: ProfileColors.accent,
                     ),
                   ],
                 ],

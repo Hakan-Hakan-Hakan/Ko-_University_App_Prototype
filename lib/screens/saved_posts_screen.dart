@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../models/club.dart';
+import '../models/content_audience.dart';
 import '../models/event.dart';
 import '../models/news_post.dart';
 import '../services/app_colors.dart';
@@ -11,8 +12,10 @@ import '../services/auth_service.dart';
 import '../services/user_prefs_service.dart';
 import '../services/user_state.dart';
 import '../widgets/club_avatar.dart';
+import '../widgets/content_audience_sheet.dart';
 import 'event_detail_screen.dart';
 import 'post_detail_screen.dart';
+import '../services/content_visibility.dart';
 
 /// Lists everything the current user has bookmarked via the save button —
 /// posts and events, split by a segmented control. Tapping a row opens the
@@ -72,11 +75,17 @@ class _SavedPostsScreenState extends State<SavedPostsScreen> {
             );
           }
 
+          // A student can have saved content *before* the club restricted it,
+          // so this is the one surface where the tier changes under the viewer.
           final savedPosts =
-              newsPosts.where((p) => userState.isSaved(p.id)).toList()
+              newsPosts
+                  .where((p) => userState.isSaved(p.id) && canViewPost(p))
+                  .toList()
                 ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
           final savedEvents =
-              events.where((e) => userState.isSaved(e.id)).toList()
+              events
+                  .where((e) => userState.isSaved(e.id) && canViewEvent(e))
+                  .toList()
                 ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
 
           return Column(
@@ -357,6 +366,14 @@ class _SavedPostRow extends StatelessWidget {
                       color: AppColors.secondaryText,
                     ),
                   ),
+                  if (audienceForPost(post) != ContentAudience.everyone) ...[
+                    const SizedBox(height: 6),
+                    ContentAudiencePill(
+                      key: ValueKey('content-audience-pill-${post.id}'),
+                      audience: audienceForPost(post),
+                      accent: color,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -460,6 +477,14 @@ class _SavedEventRow extends StatelessWidget {
                       color: AppColors.secondaryText,
                     ),
                   ),
+                  if (audienceForEvent(event) != ContentAudience.everyone) ...[
+                    const SizedBox(height: 6),
+                    ContentAudiencePill(
+                      key: ValueKey('content-audience-pill-${event.id}'),
+                      audience: audienceForEvent(event),
+                      accent: color,
+                    ),
+                  ],
                 ],
               ),
             ),

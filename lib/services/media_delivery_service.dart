@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'supabase_config.dart';
+import 'guest_session.dart';
 
 /// Delivery copies only. [original] always resolves to the canonical object.
 enum MediaRendition { thumbnail, feed, screen, original }
@@ -207,6 +208,9 @@ class MediaDeliveryService {
   final Map<String, Future<ResolvedMedia>> _inFlight = {};
 
   SupabaseClient? get _client {
+    // Guest mode reuses the unconfigured-backend path: with no client every
+    // remote read/write in this service degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     if (_clientOverride != null) return _clientOverride;
     if (!SupabaseConfig.isConfigured) return null;
     try {

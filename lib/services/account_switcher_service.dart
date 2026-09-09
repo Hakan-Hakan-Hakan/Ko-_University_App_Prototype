@@ -7,6 +7,7 @@ import 'auth_service.dart';
 import 'lazy_content_loader.dart';
 import 'mock_data.dart';
 import 'supabase_config.dart';
+import 'guest_session.dart';
 
 enum AccountKind { personal, club }
 
@@ -47,6 +48,9 @@ class AccountSwitcherService extends ChangeNotifier {
   String? get _currentUserId => authService.currentUser?.id;
 
   SupabaseClient? get _client {
+    // Guest mode reuses the unconfigured-backend path: with no client every
+    // remote read/write in this service degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     if (!SupabaseConfig.isConfigured) return null;
     try {
       return Supabase.instance.client;
@@ -115,6 +119,16 @@ class AccountSwitcherService extends ChangeNotifier {
     }
     if (_isLoading) return;
 
+    // The guest joyride has no remote context row and must not leave a
+    // selection behind in preferences, so its POV lives purely in memory.
+    // Board membership is still re-checked on every `activeClub` read.
+    if (guestSession.isActive) {
+      final changed = _loadedUserId != userId;
+      _loadedUserId = userId;
+      if (changed) notifyListeners();
+      return;
+    }
+
     _isLoading = true;
     try {
       try {
@@ -136,6 +150,13 @@ class AccountSwitcherService extends ChangeNotifier {
     final clubId = account.isClub ? account.club?.id : null;
     if (clubId != null && !availableClubs.any((club) => club.id == clubId)) {
       return false;
+    }
+
+    if (guestSession.isActive) {
+      _loadedUserId = userId;
+      _activeClubId = clubId;
+      notifyListeners();
+      return true;
     }
 
     final client = _client;

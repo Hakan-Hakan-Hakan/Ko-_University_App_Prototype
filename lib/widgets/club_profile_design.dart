@@ -807,6 +807,7 @@ class ClubProfileEventCard extends StatelessWidget {
     required this.timeLabel,
     required this.location,
     this.statusLabel,
+    this.audienceBadge,
     this.actionLabel,
     this.onAction,
     this.onTap,
@@ -821,6 +822,12 @@ class ClubProfileEventCard extends StatelessWidget {
 
   /// HAPPENING NOW / PAST, which the frame has no cell for but the app does.
   final String? statusLabel;
+
+  /// The `ContentAudiencePill` for a restricted event, supplied by the screen
+  /// so this widget keeps knowing nothing about the audience model — the same
+  /// division [menu] observes on the post card. Null for a public event.
+  final Widget? audienceBadge;
+
   final String? actionLabel;
   final VoidCallback? onAction;
   final VoidCallback? onTap;
@@ -848,34 +855,37 @@ class ClubProfileEventCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Row(
+                // A Wrap rather than a Row: with a status chip and an
+                // audience badge alongside it this line can carry three chips,
+                // and a narrow phone in Turkish does not fit them on one.
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Flexible(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: ClubProfileColors.accentSurface,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          '$dateLabel · $timeLabel',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: figtree(
-                            size: 10.5,
-                            weight: FontWeight.w700,
-                            color: ClubProfileColors.accentText,
-                          ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: ClubProfileColors.accentSurface,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '$dateLabel · $timeLabel',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: figtree(
+                          size: 10.5,
+                          weight: FontWeight.w700,
+                          color: ClubProfileColors.accentText,
                         ),
                       ),
                     ),
-                    if (statusLabel != null) ...[
-                      const SizedBox(width: 6),
+                    if (statusLabel != null)
                       ClubProfileChip(label: statusLabel!),
-                    ],
+                    ?audienceBadge,
                   ],
                 ),
                 const SizedBox(height: 7),

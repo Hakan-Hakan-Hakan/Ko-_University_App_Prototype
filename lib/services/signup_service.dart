@@ -12,6 +12,7 @@ import 'student_profile_service.dart';
 import 'supabase_config.dart';
 import 'supabase_read_cache.dart';
 import 'terms_acceptance_service.dart';
+import 'guest_session.dart';
 
 class SignupResult {
   final bool success;
@@ -39,6 +40,9 @@ class SignupService {
       lookupAppLocalizations(Locale(localeService.languageCode));
 
   SupabaseClient? get _client {
+    // Guest mode reuses the unconfigured-backend path: with no client every
+    // remote read/write in this service degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     if (!SupabaseConfig.isConfigured) return null;
     return Supabase.instance.client;
   }

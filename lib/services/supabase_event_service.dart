@@ -3,15 +3,21 @@ import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/content_audience.dart';
 import '../models/event.dart';
+import 'content_audience_store.dart';
 import 'lazy_content_loader.dart';
 import 'original_media_bytes.dart';
 import 'supabase_config.dart';
+import 'guest_session.dart';
 
 class SupabaseEventService {
   static const _imageBucket = 'event-images';
 
   SupabaseClient? get _client {
+    // Guest mode reuses the unconfigured-backend path: with no client every
+    // remote read/write in this service degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     if (!SupabaseConfig.isConfigured) return null;
     return Supabase.instance.client;
   }
@@ -20,7 +26,12 @@ class SupabaseEventService {
 
   Future<Event> createEvent(Event event) async {
     final client = _client;
-    if (client == null) return event;
+    if (client == null) {
+      // The local-only path: no RPC to carry the audience, so record it here
+      // or the choice is lost the moment this returns.
+      await _rememberAudience(event.id, event.audience);
+      return event;
+    }
 
     final eventId = _looksLikeUuid(event.id) ? event.id : const Uuid().v4();
     final uploadedImage = event.imagePath == null
@@ -73,12 +84,21 @@ class SupabaseEventService {
 
     final data = row;
     lazyContentLoader.invalidateContent();
-    return _eventFromRow(data, fallback: event, uploadedImage: uploadedImage);
+    final saved = _eventFromRow(
+      data,
+      fallback: event,
+      uploadedImage: uploadedImage,
+    );
+    await _rememberAudience(saved.id, saved.audience);
+    return saved;
   }
 
   Future<Event> updateEvent(Event event, {String? previousImagePath}) async {
     final client = _client;
-    if (client == null || !_looksLikeUuid(event.id)) return event;
+    if (client == null || !_looksLikeUuid(event.id)) {
+      await _rememberAudience(event.id, event.audience);
+      return event;
+    }
 
     final uploadedImage = event.imagePath == null
         ? null
@@ -140,8 +160,21 @@ class SupabaseEventService {
       objectPath: result['cleanup_path']?.toString(),
     );
     lazyContentLoader.invalidateContent();
-    return _eventFromRow(data, fallback: event, uploadedImage: uploadedImage);
+    final saved = _eventFromRow(
+      data,
+      fallback: event,
+      uploadedImage: uploadedImage,
+    );
+    await _rememberAudience(saved.id, saved.audience);
+    return saved;
   }
+
+  /// Every return path of [createEvent] and [updateEvent] goes through here,
+  /// including the two early returns — those *are* the local-only path the
+  /// feature is exercised on, so skipping them would leave the audience
+  /// recorded nowhere.
+  Future<void> _rememberAudience(String id, ContentAudience audience) =>
+      contentAudienceStore.setAudience(id, audience);
 
   Future<void> deleteEvent(Event event) async {
     final client = _client;
@@ -189,6 +222,9 @@ class SupabaseEventService {
       registrationUrl:
           data['registration_url']?.toString() ?? fallback.registrationUrl,
       speakers: _speakersFromRaw(data['speakers']),
+      // The column does not exist yet, so the client's choice is the only
+      // source. Becomes contentAudienceFromWire(data['audience']) later.
+      audience: fallback.audience,
     );
   }
 

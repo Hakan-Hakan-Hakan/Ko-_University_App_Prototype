@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
+import 'guest_session.dart';
 
 /// How message groups are laid out in a club community stream.
 enum ClubMessageStyle { rows, bubbles, cards }
@@ -96,6 +97,7 @@ class ClubChatPrefs extends ChangeNotifier {
   }
 
   void _persist(String key, Object value) {
+    if (guestSession.isActive) return;
     final box = _box;
     if (box != null) unawaited(box.put(key, value));
     notifyListeners();

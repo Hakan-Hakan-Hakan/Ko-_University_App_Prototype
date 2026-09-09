@@ -21,6 +21,7 @@ import 'club_insights_screen.dart';
 import 'event_detail_screen.dart';
 import 'post_detail_screen.dart';
 import 'settings_screen.dart';
+import '../services/rsvp_store.dart';
 
 /// App-wide moderation dashboard. The overview keeps campus totals and club
 /// rankings, while the content tabs expose every loaded post and event to the
@@ -111,6 +112,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
     if (!await showLogoutConfirmationDialog(context) || !mounted) return;
     await authService.logout();
     if (!mounted) return;
+    // Matches SettingsScreen's logout: the RSVP cache is account-scoped and
+    // would otherwise survive into the next session.
+    rsvpStore.clear();
     widget.onLogout!();
   }
 

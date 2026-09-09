@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../models/content_audience.dart';
 import '../models/news_post.dart';
 import '../screens/create_post_screen.dart' show buildPostBanner;
 import '../screens/post_detail_screen.dart';
 import '../services/app_colors.dart';
 import '../services/app_strings.dart';
+import '../services/content_visibility.dart';
 import '../services/mock_data.dart';
 import 'club_avatar.dart';
+import 'content_audience_sheet.dart';
 
 /// Compact, tappable post preview rendered inside conversations.
 class SharedPostMessageCard extends StatelessWidget {
@@ -152,6 +155,17 @@ class SharedPostMessageCard extends StatelessWidget {
                           height: 1.3,
                           fontSize: 12,
                         ),
+                      ),
+                    ],
+                    // A restricted post keeps its badge when it is forwarded
+                    // into a conversation — that is where the recipient is
+                    // least likely to know where it came from.
+                    if (audienceForPost(post) != ContentAudience.everyone) ...[
+                      const SizedBox(height: 8),
+                      ContentAudiencePill(
+                        key: ValueKey('content-audience-pill-${post.id}'),
+                        audience: audienceForPost(post),
+                        accent: onDarkBackground ? Colors.white : color,
                       ),
                     ],
                   ],

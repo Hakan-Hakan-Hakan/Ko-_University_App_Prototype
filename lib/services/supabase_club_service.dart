@@ -7,11 +7,15 @@ import '../models/club.dart';
 import 'lazy_content_loader.dart';
 import 'people_service.dart';
 import 'supabase_config.dart';
+import 'guest_session.dart';
 
 class SupabaseClubService {
   static const _logoBucket = 'club-avatars';
 
   SupabaseClient? get _client {
+    // Guest mode reuses the unconfigured-backend path: with no client every
+    // remote read/write in this service degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     if (!SupabaseConfig.isConfigured) return null;
     // Widget/integration tests and offline mock sessions do not always run
     // Supabase.initialize. In that case the existing local persistence path

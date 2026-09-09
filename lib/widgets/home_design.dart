@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../l10n/app_localizations.dart';
+import '../models/content_audience.dart';
 import '../models/news_post.dart';
 import '../screens/club_profile_screen.dart';
 import '../screens/create_post_screen.dart' show buildPostBanner;
 import '../services/app_strings.dart';
 import '../services/auth_service.dart';
 import '../services/club_follow_helper.dart';
+import '../services/content_visibility.dart';
 import '../services/comment_store.dart';
 import '../services/image_aspect_ratio.dart';
 import '../services/mock_data.dart';
@@ -22,6 +24,7 @@ import 'app_motion.dart';
 import 'club_avatar.dart';
 import 'club_profile_design.dart' show ClubVerifiedName;
 import 'clubup_design.dart';
+import 'content_audience_sheet.dart';
 import 'expandable_post_caption.dart';
 import 'home_comments_sheet.dart';
 import 'home_share_sheet.dart';
@@ -545,6 +548,12 @@ class _HomeFeedPostCardState extends State<HomeFeedPostCard>
         widget.post.imagePath != null &&
         widget.post.imagePath!.trim().isNotEmpty;
     final body = widget.post.content.trim();
+    // A restricted post gets a badge on the same line as the announcement
+    // chip, not a line of its own: they are both one-word answers to "what
+    // kind of post is this", and stacking them pushes the caption down.
+    final audience = audienceForPost(widget.post);
+    final hasChips =
+        widget.post.isAnnouncement || audience != ContentAudience.everyone;
 
     return GestureDetector(
       behavior: HitTestBehavior.deferToChild,
@@ -576,10 +585,29 @@ class _HomeFeedPostCardState extends State<HomeFeedPostCard>
               _postInfoHeader(club.name, dark, belowMedia: true),
             ] else
               _postInfoHeader(club.name, dark),
-            if (widget.post.isAnnouncement)
+            if (hasChips)
               Padding(
                 padding: EdgeInsets.fromLTRB(16, hasImage ? 16 : 14, 16, 0),
-                child: _announcementChip(),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (widget.post.isAnnouncement) _announcementChip(),
+                    if (audience != ContentAudience.everyone)
+                      ContentAudiencePill(
+                        key: ValueKey(
+                          'content-audience-pill-${widget.post.id}',
+                        ),
+                        audience: audience,
+                        accent: ClubUpColors.accent,
+                        // `accent` is `#800020` in both themes and fails
+                        // contrast as text on a dark card, which is the whole
+                        // reason `accentText` exists.
+                        foreground: ClubUpColors.accentText,
+                      ),
+                  ],
+                ),
               ),
             if (body.isNotEmpty)
               Padding(
@@ -587,7 +615,7 @@ class _HomeFeedPostCardState extends State<HomeFeedPostCard>
                   16,
                   hasImage
                       ? 10
-                      : widget.post.isAnnouncement
+                      : hasChips
                       ? 14
                       : 16,
                   16,

@@ -30,6 +30,7 @@ import 'rate_limit_error.dart';
 import 'supabase_config.dart';
 import 'user_state.dart';
 import 'upload_failure_classifier.dart';
+import 'guest_session.dart';
 
 /// The two lanes of a club room, per the Club Board + Chat handoff: `board` is
 /// the official notice area, `chat` is the room where the conversation lives.
@@ -643,6 +644,53 @@ class ChatStore extends ChangeNotifier {
     }
   }
 
+  // ── Guest joyride ─────────────────────────────────────────────────────────
+
+  /// Installs the fabricated guest conversations.
+  ///
+  /// `_box` doubles as this store's "initialized" sentinel — about nine read
+  /// paths return empty while it is null — so guest mode cannot simply skip
+  /// [initialize]. Instead the box stays open and every write is gated, which
+  /// has a second benefit: the device owner's cached chat rows are left
+  /// untouched on disk, so a joyride cannot destroy someone's offline history.
+  ///
+  /// The caller must already have set `guestSession.begin()`; the clear below
+  /// would otherwise persist an empty snapshot over the real account's rows.
+  void seedGuestConversations({
+    required Iterable<ChatMessage> messages,
+    required Iterable<String> directThreadIds,
+    required Iterable<ChatGroup> groups,
+    Iterable<ClubInboxConversation> clubInboxes = const [],
+  }) {
+    assert(
+      guestSession.isActive,
+      'Seed guest conversations only inside a guest session, otherwise the '
+      'teardown below writes an empty snapshot over the real account.',
+    );
+    clearChatV2AuthBoundary();
+    _messages.addAll(messages);
+    _directThreadIds.addAll(directThreadIds);
+    for (final group in groups) {
+      _groups[group.id] = group;
+    }
+    // The Direct lane of a club room is driven by these conversations, and the
+    // real ones only ever arrive from Supabase, so a guest with none has an
+    // empty lane no matter how many messages are seeded.
+    for (final conversation in clubInboxes) {
+      _clubInboxes[conversation.id] = conversation;
+    }
+    notifyListeners();
+  }
+
+  /// Drops the guest conversations from memory.
+  ///
+  /// Called while the guest flag is still set, so nothing is written; the next
+  /// real sign-in re-syncs from Supabase through [startChatV2Sync].
+  void clearGuestConversations() {
+    clearChatV2AuthBoundary();
+    notifyListeners();
+  }
+
   void _clearTypingAtAuthBoundary() {
     for (final session in _typingSessions.toList(growable: false)) {
       session.dispose();
@@ -1103,6 +1151,9 @@ class ChatStore extends ChangeNotifier {
   }
 
   SupabaseClient? get _client {
+    // Guest mode reuses the unconfigured-backend path: with no client every
+    // remote read/write in this service degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     if (!SupabaseConfig.isConfigured) return null;
     try {
       return Supabase.instance.client;
@@ -4650,6 +4701,9 @@ class ChatStore extends ChangeNotifier {
   Timer? _saveDebounce;
 
   void scheduleSave() {
+    // Nothing the guest does reaches disk, and no timer is left armed to fire
+    // after the joyride is torn down.
+    if (guestSession.isActive) return;
     _saveDebounce?.cancel();
     _saveDebounce = Timer(const Duration(seconds: 1), () {
       unawaited(saveAll());
@@ -4657,6 +4711,7 @@ class ChatStore extends ChangeNotifier {
   }
 
   Future<void> saveAll() async {
+    if (guestSession.isActive) return;
     _saveDebounce?.cancel();
     _saveDebounce = null;
     final box = _box;

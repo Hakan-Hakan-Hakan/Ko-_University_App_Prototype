@@ -9,6 +9,7 @@ import '../services/app_strings.dart';
 import '../l10n/app_localizations.dart';
 import '../services/auth_service.dart';
 import '../services/chat_store.dart';
+import '../services/guest_world.dart' show kGuestIdPrefix;
 import '../services/checkin_store.dart';
 import '../services/club_role_localization.dart';
 import '../services/lazy_content_loader.dart';
@@ -368,7 +369,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       listenable: userState,
       builder: (context, _) {
         final displayName = userState.displayNameFor(user.id, user.name);
-        final handle = profileHandle(user.email);
+        // Guest-world people are fabricated demo accounts. Do not present a
+        // username for them as though it belonged to a real student.
+        final handle = user.id.startsWith(kGuestIdPrefix)
+            ? ''
+            : profileHandle(user.email);
         final isFollowingUser = userState.isFollowingUser(user.id);
         final isPending = userState.hasPendingRequest(user.id);
         final canAct = !_isOwnProfile && authService.isStudentSession;

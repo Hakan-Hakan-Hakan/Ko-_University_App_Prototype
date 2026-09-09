@@ -8,6 +8,7 @@ import '../services/chat_store.dart';
 import '../services/mock_data.dart';
 import '../services/rsvp_store.dart';
 import '../services/user_state.dart';
+import '../services/guest_session.dart';
 
 /// The post-tour starter checklist: follow a club, RSVP to an event, say hi.
 ///
@@ -137,6 +138,7 @@ class StarterChecklistService extends ChangeNotifier {
   // ── Persistence ────────────────────────────────────────────────────────────
 
   Future<void> _persist() async {
+    if (guestSession.isActive) return;
     if (_preferences == null || _userId.isEmpty) return;
     await _preferences!.setString(
       '$_prefix$_userId',

@@ -12,6 +12,7 @@ import 'poll_store.dart';
 import 'supabase_config.dart';
 import 'supabase_club_service.dart';
 import 'user_state.dart';
+import 'guest_session.dart';
 
 class StudentEventHistorySnapshot {
   final List<Event> events;
@@ -49,6 +50,9 @@ class SupabaseContentService {
       lookupAppLocalizations(Locale(localeService.languageCode));
 
   SupabaseClient? get _client {
+    // Guest mode reuses the unconfigured-backend path: with no client every
+    // remote read/write in this service degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     if (!SupabaseConfig.isConfigured) return null;
     try {
       return Supabase.instance.client;

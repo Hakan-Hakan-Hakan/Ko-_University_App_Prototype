@@ -8,6 +8,7 @@ import 'locale_service.dart';
 import 'supabase_config.dart';
 import 'supabase_read_cache.dart';
 import 'user_state.dart';
+import 'guest_session.dart';
 
 typedef ProfileFollowEdge = ({String followerId, String followingId});
 
@@ -120,6 +121,22 @@ class PeopleService {
     _cachedFollowerIds = {..._cachedFollowerIds, ...followerIds};
   }
 
+  /// Seeds both halves of the follow graph for a session with no backend.
+  ///
+  /// [seedFeedSuggestions] only fills [cachedFollowerIds], which is enough for
+  /// the mutual-follow checks but not for the profile's Followers stat — that
+  /// reads [followersFor], i.e. the per-user map filled here.
+  void seedConnections({
+    required String userId,
+    required Iterable<String> followerIds,
+    required Iterable<String> followingIds,
+  }) {
+    final followers = followerIds.toSet();
+    _followersByUserId[userId] = followers;
+    _followingByUserId[userId] = followingIds.toSet();
+    _cachedFollowerIds = {..._cachedFollowerIds, ...followers};
+  }
+
   /// Merges the deliberately small participant projection returned by Chat v2
   /// without triggering a second profile-directory request.
   void seedChatParticipants(Iterable<User> participants) {
@@ -170,6 +187,9 @@ class PeopleService {
   }
 
   SupabaseClient? get _client {
+    // Guest mode reuses the unconfigured-backend path: with no client every
+    // remote read/write in this service degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     if (!SupabaseConfig.isConfigured) return null;
     return Supabase.instance.client;
   }

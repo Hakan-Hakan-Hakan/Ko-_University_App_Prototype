@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'event_cleanup_service.dart';
+import 'guest_session.dart';
 import 'supabase_content_service.dart';
 import 'supabase_config.dart';
 import 'supabase_interaction_service.dart';
@@ -48,6 +49,8 @@ class LazyContentLoader {
   int _generation = 0;
 
   Future<void> ensureContentLoaded({bool force = false}) {
+    // The guest world is already in memory and is the only content there is.
+    if (guestSession.isActive) return Future.value();
     final request = _requestContext();
     if (!force && _isFresh(_contentLoadedAt, _contentTtl)) {
       return Future.value();
@@ -71,6 +74,7 @@ class LazyContentLoader {
   }
 
   Future<void> ensureCountsLoaded({bool force = false}) {
+    if (guestSession.isActive) return Future.value();
     final request = _requestContext();
     if (!force && _isFresh(_countsLoadedAt, _countsTtl)) {
       return Future.value();

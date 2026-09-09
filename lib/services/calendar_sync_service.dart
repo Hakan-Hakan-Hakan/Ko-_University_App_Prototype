@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:hive/hive.dart';
 import '../models/event.dart';
+import 'guest_session.dart';
 
 class CalendarSyncService extends ChangeNotifier {
   static const _boxName = 'calendar_sync_v1';
@@ -57,6 +58,8 @@ class CalendarSyncService extends ChangeNotifier {
     List<Event> eventList,
     String userId,
   ) async {
+    // Report the events as synced without touching the device calendar.
+    if (guestSession.isActive) return eventList.length;
     if (!_initialized || userId.isEmpty || eventList.isEmpty) return 0;
 
     final unsynced = eventList
@@ -85,6 +88,7 @@ class CalendarSyncService extends ChangeNotifier {
   }
 
   Future<void> markSynced(String userId, String eventId) async {
+    if (guestSession.isActive) return;
     if (!_initialized || userId.isEmpty) return;
     await _box.put(_key(userId, eventId), true);
     notifyListeners();
@@ -127,6 +131,7 @@ class CalendarSyncService extends ChangeNotifier {
   }
 
   Future<bool> _removeEventFromAppleCalendar(Event event, String userId) async {
+    if (guestSession.isActive) return false;
     try {
       final removed = await _iosCalendarChannel.invokeMethod<bool>(
         'removeEvent',

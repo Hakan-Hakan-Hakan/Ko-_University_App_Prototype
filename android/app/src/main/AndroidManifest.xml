@@ -1,10 +1,29 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- image_picker uses Android Photo Picker for gallery selections. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+
+    <!--
+      camera_android_camerax declares these for video recording, which the chat
+      camera never does (it is built with enableAudio: false, so the plugin
+      requests only CAMERA at runtime). Dropped so the store listing does not
+      claim a microphone or legacy storage access.
+
+      The camera.any feature is relaxed to optional for the same reason, but
+      note the CAMERA permission above still makes Android imply a *required*
+      android.hardware.camera feature, so camera-less devices remain filtered.
+      Relaxing that too would be a distribution decision, not a cleanup.
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"
+        tools:node="remove" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        tools:node="remove" />
+    <uses-feature android:name="android.hardware.camera.any"
+        android:required="false" tools:replace="android:required" />
 
     <application
         android:label="ClubUp"

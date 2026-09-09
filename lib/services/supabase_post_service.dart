@@ -3,17 +3,23 @@ import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/content_audience.dart';
 import '../models/news_post.dart';
+import 'content_audience_store.dart';
 import 'content_safety_service.dart';
 import 'lazy_content_loader.dart';
 import 'original_media_bytes.dart';
 import 'supabase_config.dart';
 import 'supabase_interaction_service.dart';
+import 'guest_session.dart';
 
 class SupabasePostService {
   static const _imageBucket = 'post-images';
 
   SupabaseClient? get _client {
+    // Guest mode reuses the unconfigured-backend path: with no client every
+    // remote read/write in this service degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     if (!SupabaseConfig.isConfigured) return null;
     return Supabase.instance.client;
   }
@@ -51,6 +57,7 @@ class SupabasePostService {
     String? imagePath,
     PollData? poll,
     bool isAnnouncement = false,
+    ContentAudience audience = ContentAudience.everyone,
   }) async {
     final safetyMessage = contentSafetyService.rejectionMessage([
       content,
@@ -61,7 +68,7 @@ class SupabasePostService {
 
     final client = _client;
     if (client == null) {
-      return _localPost(
+      final post = _localPost(
         clubId: clubId,
         authorId: authorId,
         content: content,
@@ -70,7 +77,10 @@ class SupabasePostService {
         imagePath: imagePath,
         poll: poll,
         isAnnouncement: isAnnouncement,
+        audience: audience,
       );
+      await contentAudienceStore.setAudience(post.id, audience);
+      return post;
     }
 
     final postId = reservedPostId != null && _looksLikeUuid(reservedPostId)
@@ -98,6 +108,9 @@ class SupabasePostService {
               'p_mentioned_user_ids': taggedUserIds,
               'p_poll_question': poll?.question,
               'p_poll_options': poll?.options,
+              // Once `club_posts.audience` exists this becomes
+              // 'p_audience': audience.wireValue — the RPC ignores it today,
+              // so the choice is held locally by contentAudienceStore below.
             },
           )
           .single();
@@ -118,6 +131,10 @@ class SupabasePostService {
 
     lazyContentLoader.invalidateContent();
 
+    // Keyed on the id the server actually assigned, not the reserved one — they
+    // can differ, and an audience filed under the wrong id restricts nothing.
+    await contentAudienceStore.setAudience(savedPostId, audience);
+
     return NewsPost(
       id: savedPostId,
       clubId: data['club_id']?.toString() ?? clubId,
@@ -134,6 +151,7 @@ class SupabasePostService {
           data['image_path']?.toString(),
       poll: poll,
       isAnnouncement: isAnnouncement,
+      audience: audience,
     );
   }
 
@@ -217,6 +235,7 @@ class SupabasePostService {
     String? imagePath,
     PollData? poll,
     bool isAnnouncement = false,
+    ContentAudience audience = ContentAudience.everyone,
   }) {
     return NewsPost(
       id: 'p_${DateTime.now().millisecondsSinceEpoch}',
@@ -229,6 +248,7 @@ class SupabasePostService {
       imagePath: imagePath,
       poll: poll,
       isAnnouncement: isAnnouncement,
+      audience: audience,
     );
   }
 

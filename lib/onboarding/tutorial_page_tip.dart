@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../widgets/tutorial_design.dart';
 import 'widgets/onboarding_guide_card.dart';
+import '../services/guest_session.dart';
 
 /// Page-level tips — `panel-behaviour` `392:24`: "A student who skipped still
 /// gets the single card for a page the first time they open it, so nothing
@@ -41,6 +42,7 @@ class TutorialPageTips {
   }
 
   Future<void> markSeen(String id) async {
+    if (guestSession.isActive) return;
     final prefs = await _prefs;
     await prefs.setBool('$_seenPrefix$id', true);
   }
@@ -48,12 +50,14 @@ class TutorialPageTips {
   /// "Skip tour ends the whole tour, not just the current page, and never asks
   /// a second time" — from a page tip that means no further tips either.
   Future<void> suppressAll() async {
+    if (guestSession.isActive) return;
     final prefs = await _prefs;
     await prefs.setBool(_offKey, true);
   }
 
   @visibleForTesting
   Future<void> reset() async {
+    if (guestSession.isActive) return;
     final prefs = await _prefs;
     for (final key in prefs.getKeys().toList()) {
       if (key.startsWith(_seenPrefix) || key == _offKey) {

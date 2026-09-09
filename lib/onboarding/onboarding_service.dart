@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/supabase_config.dart';
+import '../services/guest_session.dart';
 
 typedef TutorialCompletionLoader = Future<bool?> Function(String profileId);
 typedef TutorialCompletionWriter = Future<void> Function(String profileId);
@@ -116,6 +117,10 @@ class OnboardingService {
   /// cannot masquerade as durable cross-device completion.
   Future<void> complete(String profileId) async {
     if (profileId.isEmpty) return;
+    // The guest tour must not retire the tutorial for whoever owns the device.
+    // (The auto-run passes TutorialLaunchSource.manual, which `finish` already
+    // filters out; this is the belt to that braces.)
+    if (guestSession.isActive) return;
 
     final injectedWriter = _completionWriter;
     if (injectedWriter != null) {
@@ -160,6 +165,9 @@ class OnboardingService {
   }
 
   SupabaseClient? get _client {
+    // Guest mode reuses the unconfigured-backend path: with no client every
+    // remote read/write in this service degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     if (!SupabaseConfig.isConfigured) return null;
     try {
       return Supabase.instance.client;

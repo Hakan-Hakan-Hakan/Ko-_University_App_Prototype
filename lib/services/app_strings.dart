@@ -1,3 +1,4 @@
+import '../models/content_audience.dart';
 import 'locale_service.dart';
 
 class S {
@@ -983,6 +984,34 @@ class S {
     'The media could not be sent. Please try again.',
     'Medya gönderilemedi. Lütfen tekrar dene.',
   );
+
+  // ── Chat camera
+  static String get cameraUnavailable =>
+      _t('Camera unavailable', 'Kamera kullanılamıyor');
+  static String get cameraUnavailableBody => _t(
+    'No camera is available right now. Pick a photo from your library instead.',
+    'Şu anda kullanılabilir bir kamera yok. Bunun yerine arşivinden bir '
+        'fotoğraf seç.',
+  );
+  static String get cameraPermissionTitle =>
+      _t('Camera access is off', 'Kamera erişimi kapalı');
+  static String get cameraPermissionBody => _t(
+    'Allow camera access in Settings to take a photo here.',
+    'Buradan fotoğraf çekmek için Ayarlar\u2019dan kamera erişimine izin ver.',
+  );
+  static String get cameraRestrictedBody => _t(
+    'Camera use is restricted on this device.',
+    'Bu cihazda kamera kullanımı kısıtlanmış.',
+  );
+  static String get openSettings => _t('Open Settings', 'Ayarları Aç');
+  static String get switchCamera => _t('Switch camera', 'Kamerayı değiştir');
+  static String get flashOff => _t('Flash off', 'Flaş kapalı');
+  static String get flashAuto => _t('Flash auto', 'Flaş otomatik');
+  static String get flashOn => _t('Flash on', 'Flaş açık');
+  static String get cameraCaptureFailed => _t(
+    'That photo could not be taken. Please try again.',
+    'Fotoğraf çekilemedi. Lütfen tekrar dene.',
+  );
   static String get attachPoll => _t('Poll', 'Anket');
   static String get attachEvent => _t('Event', 'Etkinlik');
   static String get mentionEveryone => _t('everyone', 'herkes');
@@ -1367,6 +1396,37 @@ class S {
   /// `divider` — between Log In and Sign Up.
   static String get landingOr => _t('OR', 'VEYA');
 
+  /// `btn-guest` `631:17` on `Login Screen New ` — the top-left pill. The frame
+  /// letters it "Continue as Guest"; the user shortened it to fit the pill.
+  /// Opens the guest joyride (see `guest_world.dart`).
+  static String get landingGuestLogin => _t('Guest Login', 'Misafir Girişi');
+
+  // ── Guest joyride ───────────────────────────────────────────────────────────
+  // Shown once, immediately after the guest pill is tapped, before the tour.
+  // A visitor must not mistake the fabricated campus for the real thing.
+
+  static String get guestNoticeTitle => _t('This is a demo', 'Bu bir demo');
+
+  static String get guestNoticeBody => _t(
+    'You are exploring ClubUp with sample data. The students, clubs, posts, '
+        'events and messages you see here are made up — none of them are real.',
+    'ClubUp\'u örnek verilerle keşfediyorsunuz. Burada gördüğünüz öğrenciler, '
+        'kulüpler, gönderiler, etkinlikler ve mesajlar kurgusaldır — hiçbiri '
+        'gerçek değildir.',
+  );
+
+  static String get guestNoticeFooter => _t(
+    'Everything works, so do try it: like a post, RSVP to an event, send a '
+        'message. Nothing you do is saved, and it is all cleared when you log out '
+        'from Settings.',
+    'Her şey çalışıyor, deneyin: bir gönderiyi beğenin, bir etkinliğe katılın, '
+        'mesaj gönderin. Yaptığınız hiçbir şey kaydedilmez ve Ayarlar\'dan çıkış '
+        'yaptığınızda tümü silinir.',
+  );
+
+  static String get guestNoticeAction =>
+      _t('Start exploring', 'Keşfetmeye başla');
+
   /// `footer/admin-link`. One tap opens the club portal; five quick taps still
   /// reveal the platform-admin entry.
   static String get landingClubAdminPortal =>
@@ -1520,6 +1580,53 @@ class S {
   );
   static String get eventWizardCreateEventSubtitle =>
       _t('Plan and host a new event', 'Yeni bir etkinlik planla');
+
+  // ── CONTENT AUDIENCE — who a post or event is addressed to ──────────────────
+  // Three nested tiers shared by the post composer and the event wizard, so the
+  // copy lives here once rather than in each area's own block.
+  static String get audienceFieldLabel =>
+      _t('Who can see this', 'Bunu kim görebilir');
+  static String get audienceSheetTitle =>
+      _t('Who can see this', 'Bunu kim görebilir');
+  static String get audienceEveryone => _t('Everyone', 'Herkes');
+  static String get audienceEveryoneHint =>
+      _t('All students on campus', 'Kampüsteki tüm öğrenciler');
+  static String get audienceFollowers => _t('Followers', 'Takipçiler');
+  static String get audienceFollowersHint =>
+      _t('People who follow your club', 'Kulübünü takip edenler');
+  static String get audienceBoard => _t('Board members', 'Yönetim kurulu');
+  static String get audienceBoardHint =>
+      _t('Your board only', 'Sadece yönetim kurulun');
+
+  /// The short label a picker cell shows once a tier is chosen.
+  static String audienceTierLabel(ContentAudience audience) =>
+      switch (audience) {
+        ContentAudience.everyone => audienceEveryone,
+        ContentAudience.followers => audienceFollowers,
+        ContentAudience.board => audienceBoard,
+      };
+
+  static String audienceTierHint(ContentAudience audience) =>
+      switch (audience) {
+        ContentAudience.everyone => audienceEveryoneHint,
+        ContentAudience.followers => audienceFollowersHint,
+        ContentAudience.board => audienceBoardHint,
+      };
+
+  /// The badge a restricted post or event carries on its card. Empty for
+  /// [ContentAudience.everyone] — public content gets no badge at all.
+  static String audienceTierPill(ContentAudience audience) =>
+      switch (audience) {
+        ContentAudience.everyone => '',
+        ContentAudience.followers => _t(
+          'Followers only',
+          'Yalnızca takipçiler',
+        ),
+        ContentAudience.board => _t('Board only', 'Yalnızca yönetim'),
+      };
+
+  static String get audienceChangeAction =>
+      _t('Change audience', 'Görünürlüğü değiştir');
 
   // ── CLUB CHATS area ─────────────────────────────────────────────────────────
   // Section label `543:32`: the club side of a room a student already sees.
@@ -1900,4 +2007,25 @@ class S {
       _t('Replay the tour', 'Turu tekrar izle');
   static String get tutorialExploreClubUp =>
       _t('Explore ClubUp', 'ClubUp’ı keşfet');
+
+  // ── EVENT ATTENDEES area
+  // A student is shown their friends going, never the guest list, and never a
+  // headcount — so none of these carry a number. The singular exists only
+  // because "Friends that are going" reads wrong for exactly one.
+  static String get friendsGoingLabel =>
+      _t('Friends that are going', 'Arkadaşların katılıyor');
+  static String get oneFriendGoingLabel =>
+      _t('A friend is going', 'Bir arkadaşın katılıyor');
+  static String get friendsGoingTitle =>
+      _t('Friends going', 'Katılan arkadaşlar');
+  // The empty list has to say why it is empty rather than claim nobody is
+  // going — the event may well be full.
+  static String get friendsGoingEmpty => _t(
+    'None of your friends are going yet',
+    'Arkadaşlarından kimse henüz katılmıyor',
+  );
+  static String get attendeesHiddenForClubs => _t(
+    'Only the hosting club can see who is going',
+    'Kimlerin katıldığını yalnızca etkinliği düzenleyen kulüp görebilir',
+  );
 }

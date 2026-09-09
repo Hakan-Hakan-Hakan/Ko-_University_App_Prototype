@@ -5,8 +5,10 @@ import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
+import '../models/content_audience.dart';
 import '../models/event.dart';
 import '../services/app_strings.dart';
+import '../services/content_visibility.dart';
 import '../services/app_colors.dart';
 import '../services/account_switcher_service.dart';
 import '../services/auth_service.dart';
@@ -18,6 +20,7 @@ import '../services/photo_upload_quality.dart';
 import '../services/rate_limit_error.dart';
 import '../services/supabase_event_service.dart';
 import '../widgets/clubup_design.dart';
+import '../widgets/content_audience_sheet.dart';
 import '../widgets/event_wizard_design.dart';
 import '../l10n/app_localizations.dart';
 
@@ -97,6 +100,9 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   DateTime? _startDate;
   DateTime? _endDate;
 
+  /// Who the event is addressed to — `everyone` unless the club narrows it.
+  ContentAudience _selectedAudience = ContentAudience.everyone;
+
   /// Which cell the open picker sheet belongs to — that one takes the accent
   /// ring in `315:56`.
   String? _activePicker;
@@ -116,6 +122,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     final ev = widget.existing;
     if (ev == null) return;
 
+    _selectedAudience = audienceForEvent(ev);
     _titleController.text = ev.title;
     _descController.text = ev.description;
     _locationController.text = ev.location;
@@ -334,6 +341,26 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
     });
   }
 
+  /// The audience sheet, driven like the date and time cells so the open one
+  /// takes the accent ring.
+  Future<void> _pickAudience() async {
+    setState(() => _activePicker = 'audience');
+    final picked = await showContentAudienceSheet(
+      context,
+      current: _selectedAudience,
+      surface: EventWizardColors.card,
+      border: EventWizardColors.border,
+      text: EventWizardColors.text,
+      muted: EventWizardColors.muted,
+      accent: EventWizardColors.accent,
+    );
+    if (!mounted) return;
+    setState(() {
+      _activePicker = null;
+      if (picked != null) _selectedAudience = picked;
+    });
+  }
+
   /// `add-speaker-modal` 325:154 — replaces the three inline fields per
   /// speaker the old Details step drew.
   Future<void> _openSpeakerSheet({int? index}) async {
@@ -486,6 +513,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         registrationUrl: (_externalReg && regUrl.isNotEmpty) ? regUrl : null,
         capacity: ev.capacity,
         speakers: speakers,
+        audience: _selectedAudience,
       );
       Event saved;
       try {
@@ -541,6 +569,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       schedule: schedule,
       registrationUrl: (_externalReg && regUrl.isNotEmpty) ? regUrl : null,
       speakers: speakers,
+      audience: _selectedAudience,
     );
 
     setState(() => _isPosting = true);
@@ -835,6 +864,16 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 12),
+        EventWizardPickerField(
+          fieldKey: const ValueKey('event-wizard-audience'),
+          label: S.audienceFieldLabel,
+          icon: Icons.visibility_outlined,
+          value: S.audienceTierLabel(_selectedAudience),
+          placeholder: S.audienceTierLabel(ContentAudience.everyone),
+          active: _activePicker == 'audience',
+          onTap: () => unawaited(_pickAudience()),
         ),
       ],
     );

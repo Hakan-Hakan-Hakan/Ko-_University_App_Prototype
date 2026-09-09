@@ -35,7 +35,7 @@
 	<key>NSCalendarsUsageDescription</key>
 	<string>My Clubs would like to add your RSVP events to your Apple Calendar.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>UniHub needs access to your camera to let you take a profile photo.</string>
+	<string>My Clubs needs your camera so you can take a profile photo or send a photo in a chat.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>UniHub needs access to save your cropped profile photo.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

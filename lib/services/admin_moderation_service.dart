@@ -8,6 +8,7 @@ import '../models/admin_moderation_report.dart';
 import '../models/app_admin.dart';
 import 'mock_clubup_profile.dart';
 import 'supabase_config.dart';
+import 'guest_session.dart';
 
 /// Local moderation state plus the server-side moderation queue for ClubUp.
 ///
@@ -260,6 +261,7 @@ class AdminModerationService extends ChangeNotifier {
   }
 
   Future<void> _persistReports() async {
+    if (guestSession.isActive) return;
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString(
       _reportsKey,
@@ -268,6 +270,7 @@ class AdminModerationService extends ChangeNotifier {
   }
 
   Future<void> _persistBans() async {
+    if (guestSession.isActive) return;
     final preferences = await SharedPreferences.getInstance();
     await Future.wait([
       preferences.setStringList(_bannedUserIdsKey, _bannedUserIds.toList()),

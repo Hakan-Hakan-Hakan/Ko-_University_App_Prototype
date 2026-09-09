@@ -1,3 +1,5 @@
+import 'content_audience.dart';
+
 /// Poll attached to a post: a question with 2–4 options students vote on.
 /// The option index doubles as the option id.
 class PollData {
@@ -44,6 +46,10 @@ class NewsPost {
   /// the club's feed section (distinct from per-user pinning).
   final bool isAnnouncement;
 
+  /// Who this post is addressed to. See [ContentAudience] — three nested
+  /// tiers, defaulting to [ContentAudience.everyone].
+  final ContentAudience audience;
+
   // Legacy persisted field. Not displayed anywhere in the UI.
   final String title;
 
@@ -59,6 +65,7 @@ class NewsPost {
     this.imagePath,
     this.poll,
     this.isAnnouncement = false,
+    this.audience = ContentAudience.everyone,
   });
 
   Map<String, dynamic> toMap() => {
@@ -73,6 +80,7 @@ class NewsPost {
     'imagePath': imagePath,
     'poll': poll?.toMap(),
     'isAnnouncement': isAnnouncement,
+    'audience': audience.wireValue,
   };
 
   factory NewsPost.fromMap(Map<String, dynamic> m) => NewsPost(
@@ -89,5 +97,42 @@ class NewsPost {
         ? null
         : PollData.fromMap(Map<String, dynamic>.from(m['poll'] as Map)),
     isAnnouncement: m['isAnnouncement'] as bool? ?? false,
+    audience: contentAudienceFromWire(m['audience']),
+  );
+
+  /// Field-wise copy.
+  ///
+  /// Several call sites rebuild a post by hand — the Feed v2 adapter, the poll
+  /// attach pass, the create-post return — and every one of them silently drops
+  /// any field it does not know about. Prefer this over a fresh [NewsPost].
+  ///
+  /// Note this cannot null a field back out: passing `imagePath: null` keeps the
+  /// existing value rather than clearing it. Nothing needs that today.
+  NewsPost copyWith({
+    String? id,
+    String? clubId,
+    String? authorId,
+    String? content,
+    DateTime? createdAt,
+    String? title,
+    List<String>? taggedClubIds,
+    List<String>? taggedUserIds,
+    String? imagePath,
+    PollData? poll,
+    bool? isAnnouncement,
+    ContentAudience? audience,
+  }) => NewsPost(
+    id: id ?? this.id,
+    clubId: clubId ?? this.clubId,
+    authorId: authorId ?? this.authorId,
+    content: content ?? this.content,
+    createdAt: createdAt ?? this.createdAt,
+    title: title ?? this.title,
+    taggedClubIds: taggedClubIds ?? this.taggedClubIds,
+    taggedUserIds: taggedUserIds ?? this.taggedUserIds,
+    imagePath: imagePath ?? this.imagePath,
+    poll: poll ?? this.poll,
+    isAnnouncement: isAnnouncement ?? this.isAnnouncement,
+    audience: audience ?? this.audience,
   );
 }

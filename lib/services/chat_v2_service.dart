@@ -5,6 +5,7 @@ import '../models/chat_v2.dart';
 import 'supabase_config.dart';
 import 'media_delivery_service.dart';
 import 'supabase_read_cache.dart';
+import 'guest_session.dart';
 
 /// The first summaries page is safe to cache only inside one authenticated
 /// account scope.  Keeping the actor in the key also protects against a
@@ -51,6 +52,9 @@ class SupabaseChatV2Service implements ChatV2Source {
 
   SupabaseClient? get client {
     if (!SupabaseConfig.isConfigured) return null;
+    // Guest mode reuses the no-client path: no realtime channel is opened and
+    // no RPC is issued, and the caller degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     try {
       return Supabase.instance.client;
     } catch (_) {

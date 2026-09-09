@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../services/calendar_sync_service.dart';
 import '../services/mock_data.dart';
 import '../services/rsvp_store.dart';
+import '../services/content_visibility.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -110,6 +111,7 @@ List<CalEvent> buildMonthEvents(int year, int month) {
   // Only include app events the user has RSVP'd to
   for (final e in events) {
     if (!rsvpStore.isAttending(e.id)) continue;
+    if (!canViewEvent(e)) continue;
     final dt = e.dateTime;
     if (dt.year == year && dt.month == month + 1) {
       result.add(

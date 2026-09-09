@@ -2,8 +2,12 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'guest_session.dart';
 
 const chatAttachmentAbandonmentAge = Duration(days: 7);
+
+/// Staging segment used while the guest joyride owns the session.
+const String kGuestStagingAccountId = 'guest-session';
 
 class ChatAttachmentStagingService {
   const ChatAttachmentStagingService();
@@ -25,7 +29,13 @@ class ChatAttachmentStagingService {
       throw FileSystemException('Chat attachment does not exist', sourcePath);
     }
     final resolvedAccountId = _safeSegment(
-      accountId ?? _currentAuthId() ?? 'signed-out',
+      // Guest attachments get their own segment so leaving the joyride can
+      // delete precisely them (see `clearGuestWorld`) without touching a real
+      // account's staged files.
+      accountId ??
+          (guestSession.isActive ? kGuestStagingAccountId : null) ??
+          _currentAuthId() ??
+          'signed-out',
     );
     final root = await _root(rootOverride: rootOverride);
     final directory = Directory('${root.path}/$resolvedAccountId');

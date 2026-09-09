@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'notification_service.dart';
 import 'locale_service.dart';
 import 'supabase_config.dart';
+import 'guest_session.dart';
 
 String? notificationGroupKeyFromPushData(Map<String, dynamic> data) {
   final explicit = data['notification_group_key']?.toString().trim();
@@ -304,6 +305,11 @@ class PushNotificationService extends ChangeNotifier {
   Future<void> activateForCurrentUser() async {
     if (!isSupported || !SupabaseConfig.isConfigured) return;
     await initialize();
+
+    // A guest has no account to deliver a push to, and must never see the OS
+    // notification-permission prompt. (There is also no Supabase auth user in
+    // a guest session, so the check below would catch it too.)
+    if (guestSession.isActive) return;
 
     final client = Supabase.instance.client;
     if (client.auth.currentUser == null) return;

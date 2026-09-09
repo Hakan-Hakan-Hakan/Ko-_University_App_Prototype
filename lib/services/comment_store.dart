@@ -279,6 +279,13 @@ class CommentStore extends ChangeNotifier {
       rethrow;
     }
   }
+
+  /// Drops cached comment hydration at a session boundary.
+  void clearSessionState() {
+    _hydratedPostIds.clear();
+    _remoteCounts.clear();
+    notifyListeners();
+  }
 }
 
 /// Thrown when a comment could not be written to Supabase. The caller has

@@ -24,7 +24,6 @@ import '../services/mock_data.dart';
 import '../services/notification_inbox_service.dart';
 import '../services/notification_service.dart';
 import '../services/people_service.dart';
-import '../services/photo_orientation.dart';
 import '../services/image_cache_service.dart';
 import '../services/image_aspect_ratio.dart';
 import '../services/media_delivery_service.dart';
@@ -47,6 +46,7 @@ import '../widgets/shared_event_message_card.dart';
 import '../widgets/shared_user_profile_message_card.dart';
 import '../widgets/sent_message_entrance.dart';
 import '../widgets/swipe_to_reply.dart';
+import 'chat_camera_screen.dart';
 import 'club_community_screen.dart';
 import 'group_info_screen.dart';
 import 'media_preview_screen.dart';
@@ -553,61 +553,71 @@ class _ChatThreadScreenState extends State<ChatThreadScreen>
     await _pickAttachment(picked);
   }
 
+  /// Opens the in-app camera. The photo comes back upright and, when the front
+  /// lens took it, mirrored the way the viewfinder showed it.
+  Future<XFile?> _captureWithCamera() => Navigator.of(
+    context,
+  ).push<XFile>(ChatPageRoute(builder: (_) => const ChatCameraScreen()));
+
   Future<void> _pickAttachment(_ChatAttachment attachment) async {
-    late final List<XFile> picked;
-    try {
-      picked = switch (attachment) {
-        _ChatAttachment.photo => await ImagePicker().pickMultipleMedia(
-          maxWidth: 2048,
-          maxHeight: 2048,
-          imageQuality: 88,
-          limit: 30,
-        ),
-        _ChatAttachment.camera => [
-          ?await ImagePicker().pickImage(
-            source: ImageSource.camera,
+    while (mounted) {
+      late final List<XFile> picked;
+      try {
+        picked = switch (attachment) {
+          _ChatAttachment.photo => await ImagePicker().pickMultipleMedia(
             maxWidth: 2048,
             maxHeight: 2048,
             imageQuality: 88,
+            limit: 30,
           ),
-        ],
-      };
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(S.mediaSelectionFailed)));
+          // The in-app camera, not the system one: iOS's picker always inserts
+          // its own Retake/Use Photo step before handing the file back, and this
+          // screen already confirms a photo in MediaPreviewScreen. The camera
+          // screen also knows which lens fired, so a selfie comes back mirrored
+          // to match the viewfinder instead of guessed at from EXIF.
+          _ChatAttachment.camera => [?await _captureWithCamera()],
+        };
+      } catch (_) {
+        // Only the library branch can throw now; the camera screen reports its
+        // own failures, which is what makes this message accurate.
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(S.mediaSelectionFailed)));
+        }
+        return;
       }
-      return;
-    }
-    if (picked.isEmpty) return;
-    // Front-camera captures arrive with a mirrored EXIF orientation, which
-    // would send a mirror image of whatever was photographed.
-    if (attachment == _ChatAttachment.camera) {
-      await unmirrorPhotoFile(picked.single.path);
-    }
-    if (!mounted) return;
-    final inspected = await inspectChatMediaFiles(picked);
-    if (!mounted) return;
-    if (inspected.rejectedCount > 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(S.mediaSelectionRejected(inspected.rejectedCount)),
+      if (picked.isEmpty) return;
+      if (!mounted) return;
+      final inspected = await inspectChatMediaFiles(picked);
+      if (!mounted) return;
+      if (inspected.rejectedCount > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(S.mediaSelectionRejected(inspected.rejectedCount)),
+          ),
+        );
+      }
+      if (inspected.items.isEmpty) return;
+
+      final result = await Navigator.of(context).push<MediaPreviewResult>(
+        ChatPageRoute(
+          builder: (_) => MediaPreviewScreen(
+            initialMedia: inspected.items,
+            initialCaption: _inputController.text.trim(),
+          ),
         ),
       );
+      if (!mounted) return;
+      if (result == null) {
+        // Dismissing a captured photo means retake; cancelling the camera
+        // itself still exits through the empty selection above.
+        if (attachment == _ChatAttachment.camera) continue;
+        return;
+      }
+      await _sendAttachments(result);
+      return;
     }
-    if (inspected.items.isEmpty) return;
-
-    final result = await Navigator.of(context).push<MediaPreviewResult>(
-      ChatPageRoute(
-        builder: (_) => MediaPreviewScreen(
-          initialMedia: inspected.items,
-          initialCaption: _inputController.text.trim(),
-        ),
-      ),
-    );
-    if (!mounted || result == null) return;
-    await _sendAttachments(result);
   }
 
   Future<void> _sendAttachments(MediaPreviewResult result) async {

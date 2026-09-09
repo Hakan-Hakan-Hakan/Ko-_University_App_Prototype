@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/feed_v2.dart';
 import 'feed_v2_service.dart';
+import 'guest_session.dart';
 
 /// Paging state for the versioned feed path.
 ///
@@ -51,6 +52,14 @@ class FeedV2Controller extends ChangeNotifier {
   int get firstPageRevision => _firstPageRevision;
 
   Future<void> loadFirstPage({bool followedOnly = false, bool force = false}) {
+    // Guest mode leaves `hasLoadedFirstPage` false on purpose. FeedScreen then
+    // renders every rail from the in-memory registries — `newsPosts`, `events`,
+    // `clubs`, `peopleService.cachedPeople` — through the pre-v2 fallback it
+    // still keeps for exactly this case, which is where the seed world lives.
+    if (guestSession.isActive) {
+      _followedOnly = followedOnly;
+      return Future.value();
+    }
     final inFlight = _firstPageTask;
     if (inFlight != null && _followedOnly == followedOnly) return inFlight;
 
@@ -124,6 +133,7 @@ class FeedV2Controller extends ChangeNotifier {
   }
 
   Future<void> loadNextPage() {
+    if (guestSession.isActive) return Future.value();
     final inFlight = _nextPageTask;
     if (inFlight != null) return inFlight;
     if (_isInitialLoading ||

@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
+import '../models/content_audience.dart';
 import '../services/app_colors.dart';
+import '../services/app_strings.dart';
 import '../services/account_switcher_service.dart';
 import '../l10n/app_localizations.dart';
 import '../services/auth_service.dart';
@@ -17,6 +19,7 @@ import '../services/rate_limit_error.dart';
 import '../services/user_state.dart';
 import '../services/supabase_post_service.dart';
 import '../widgets/app_network_image.dart';
+import '../widgets/content_audience_sheet.dart';
 import '../widgets/content_image_uploader.dart';
 import '../widgets/club_avatar.dart';
 import '../widgets/pinch_zoom_image.dart';
@@ -223,6 +226,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   final Set<String> _selectedTaggedClubIds = {};
   final Set<String> _selectedTaggedUserIds = {};
 
+  /// Who the post is addressed to — `everyone` unless the club narrows it.
+  ContentAudience _selectedAudience = ContentAudience.everyone;
+
   // Image state
   String? _imagePath;
 
@@ -243,6 +249,20 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             .map((c) => _ClubOption(id: c.id, name: c.name))
             .toList();
     if (_myClubs.length == 1) _selectedClub = _myClubs.first;
+  }
+
+  Future<void> _pickAudience() async {
+    final picked = await showContentAudienceSheet(
+      context,
+      current: _selectedAudience,
+      surface: AppColors.card,
+      border: AppColors.divider,
+      text: AppColors.text,
+      muted: AppColors.secondaryText,
+      accent: AppColors.primaryRed,
+    );
+    if (!mounted || picked == null) return;
+    setState(() => _selectedAudience = picked);
   }
 
   @override
@@ -326,6 +346,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         taggedClubIds: _extractTaggedClubIds(content),
         taggedUserIds: _extractTaggedUserIds(content),
         imagePath: _hasUploadedPhoto ? _imagePath : null,
+        audience: _selectedAudience,
       );
       if (!mounted) return;
       newsPosts.insert(0, post);
@@ -545,6 +566,63 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                   ),
                   const SizedBox(height: 18),
                 ],
+
+                // Audience — sits with "who am I posting as", because "who is
+                // this for" is the same kind of decision. Same label-row idiom
+                // as the photo section further down.
+                Row(
+                  children: [
+                    Icon(
+                      Icons.visibility_outlined,
+                      size: 16,
+                      color: AppColors.text,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      S.audienceFieldLabel,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                GestureDetector(
+                  key: const ValueKey('create-post-audience'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => unawaited(_pickAudience()),
+                  child: Container(
+                    height: 48,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.all(Radius.circular(12)),
+                      border: Border.all(color: AppColors.divider),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            S.audienceTierLabel(_selectedAudience),
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.text,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right,
+                          size: 20,
+                          color: AppColors.secondaryText,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
 
                 // Content — blends into the active light/dark page surface
                 Container(

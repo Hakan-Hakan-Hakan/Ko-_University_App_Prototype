@@ -11,6 +11,7 @@ import '../models/share.dart';
 import 'auth_service.dart';
 import 'account_switcher_service.dart';
 import 'club_admin_access.dart';
+import 'guest_session.dart';
 import 'mock_data.dart';
 import 'mock_clubup_profile.dart';
 
@@ -42,6 +43,9 @@ class ContentStore extends ChangeNotifier {
 
   /// Call once after [initialize] to replace in-memory lists with stored data.
   void applyToLists() {
+    // Guest mode supplies its own world; replaying the device's cached rows
+    // over it would mix a real account's content into the demo.
+    if (guestSession.isActive) return;
     _load(
       'comments',
       comments,
@@ -79,12 +83,12 @@ class ContentStore extends ChangeNotifier {
           saveComments(),
           saveLikes(),
           saveShares(),
-          _box.put('fixtureRemovalVersion', _fixtureRemovalVersion),
-          _box.delete('seedVersion'),
+          _persist('fixtureRemovalVersion', _fixtureRemovalVersion),
+          _forget('seedVersion'),
         ]),
       );
     }
-    _box.delete('stories');
+    unawaited(_forget('stories'));
   }
 
   void _removeLegacyFixtures() {
@@ -116,6 +120,21 @@ class ContentStore extends ChangeNotifier {
       ..addAll((raw as List).map(fromRaw));
   }
 
+  /// Every Hive write in this store funnels through here.
+  ///
+  /// The guest joyride must leave nothing on disk, and it is easier to prove
+  /// that with one gate than with a check on each of the nine save methods —
+  /// `_initialized` is checked here too, since the box opens after first paint.
+  Future<void> _persist(String key, Object? value) async {
+    if (guestSession.isActive || !_initialized) return;
+    await _box.put(key, value);
+  }
+
+  Future<void> _forget(String key) async {
+    if (guestSession.isActive || !_initialized) return;
+    await _box.delete(key);
+  }
+
   // ── Debounced persistence ────────────────────────────────────────────────────
   // Each like/RSVP/comment/share tap used to re-serialize its ENTIRE list to
   // Hive on the main isolate (a rollback re-serialized it twice). Interaction
@@ -129,6 +148,9 @@ class ContentStore extends ChangeNotifier {
   final Set<String> _dirtyKinds = {};
 
   void scheduleSave(String kind) {
+    // Skip the debounce timer entirely in guest mode, so nothing is left armed
+    // to fire after the joyride is torn down.
+    if (guestSession.isActive) return;
     _dirtyKinds.add(kind);
     _saveDebounce?.cancel();
     _saveDebounce = Timer(const Duration(seconds: 1), () {
@@ -137,6 +159,7 @@ class ContentStore extends ChangeNotifier {
   }
 
   Future<void> flushPendingSaves() async {
+    if (guestSession.isActive) return;
     _saveDebounce?.cancel();
     _saveDebounce = null;
     if (!_initialized || _dirtyKinds.isEmpty) return;
@@ -154,28 +177,28 @@ class ContentStore extends ChangeNotifier {
   // ── Save helpers ─────────────────────────────────────────────────────────────
 
   Future<void> saveNewsPosts() async =>
-      _box.put('posts', newsPosts.map((p) => p.toMap()).toList());
+      _persist('posts', newsPosts.map((p) => p.toMap()).toList());
 
   Future<void> saveEvents() async =>
-      _box.put('events', events.map((e) => e.toMap()).toList());
+      _persist('events', events.map((e) => e.toMap()).toList());
 
   Future<void> saveComments() async =>
-      _box.put('comments', comments.map((c) => c.toMap()).toList());
+      _persist('comments', comments.map((c) => c.toMap()).toList());
 
   Future<void> saveLikes() async =>
-      _box.put('likes', likes.map((l) => l.toMap()).toList());
+      _persist('likes', likes.map((l) => l.toMap()).toList());
 
   Future<void> saveShares() async =>
-      _box.put('shares', shares.map((s) => s.toMap()).toList());
+      _persist('shares', shares.map((s) => s.toMap()).toList());
 
   Future<void> saveDynamicNotifications(List<AppNotification> ns) async =>
-      _box.put(
+      _persist(
         'dynNotifs',
         ns.where((n) => n.targetType != 'story').map((n) => n.toMap()).toList(),
       );
 
   Future<void> saveReadNotificationIds(Set<String> ids) async =>
-      _box.put('readNotifIds', ids.toList());
+      _persist('readNotifIds', ids.toList());
 
   Set<String> loadReadNotificationIds() {
     final raw = _box.get('readNotifIds');
@@ -209,7 +232,7 @@ class ContentStore extends ChangeNotifier {
     for (final club in clubs) {
       map[club.id] = List<String>.from(club.boardMemberIds);
     }
-    await _box.put('boardMemberIds', map);
+    await _persist('boardMemberIds', map);
   }
 
   void loadBoardMemberIds() {
@@ -235,7 +258,7 @@ class ContentStore extends ChangeNotifier {
     for (final club in clubs) {
       outer[club.id] = Map<String, dynamic>.from(club.boardMemberTitles);
     }
-    await _box.put('boardMemberTitles', outer);
+    await _persist('boardMemberTitles', outer);
   }
 
   void loadBoardMemberTitles() {
@@ -349,6 +372,7 @@ class ContentStore extends ChangeNotifier {
 
   Future<void> saveAll(List<AppNotification> dynamicNotifs) async {
     // Everything below rewrites the debounced kinds anyway.
+    if (guestSession.isActive) return;
     _saveDebounce?.cancel();
     _saveDebounce = null;
     _dirtyKinds.clear();

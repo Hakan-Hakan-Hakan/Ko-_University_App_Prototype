@@ -7,6 +7,7 @@ import '../models/notification.dart';
 import 'auth_service.dart';
 import 'supabase_club_service.dart';
 import 'supabase_config.dart';
+import 'guest_session.dart';
 
 /// Shared remote notification inbox used by both the Home bell and the
 /// notification center.
@@ -31,6 +32,9 @@ class NotificationInboxService extends ChangeNotifier {
       authService.currentUser?.id ?? authService.currentAdmin?.id ?? '';
 
   Future<void> startForCurrentUser() {
+    // No backend inbox exists for a guest; the seed world supplies the alerts
+    // through userState.dynamicNotifications instead.
+    if (guestSession.isActive) return Future.value();
     final userId = _currentUserId;
     if (!SupabaseConfig.isConfigured || userId.isEmpty) {
       return Future.value();
@@ -62,6 +66,7 @@ class NotificationInboxService extends ChangeNotifier {
   }
 
   Future<void> refresh() {
+    if (guestSession.isActive) return Future.value();
     final userId = _activeUserId ?? _currentUserId;
     if (!SupabaseConfig.isConfigured || userId.isEmpty) {
       return Future.value();
@@ -338,6 +343,7 @@ class NotificationInboxService extends ChangeNotifier {
   }
 
   void markRead(String notificationId) {
+    if (guestSession.isActive) return;
     final index = _rows.indexWhere(
       (item) => item['id']?.toString() == notificationId,
     );
@@ -421,6 +427,7 @@ class NotificationInboxService extends ChangeNotifier {
   }
 
   void markAllRead() {
+    if (guestSession.isActive) return;
     if (_rows.every((row) => row['read_at'] != null)) return;
     final readAt = DateTime.now().toUtc().toIso8601String();
     for (var index = 0; index < _rows.length; index++) {

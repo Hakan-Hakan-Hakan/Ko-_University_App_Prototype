@@ -30,6 +30,11 @@ class LoginScreen extends StatefulWidget {
   final VoidCallback onLogin;
   final VoidCallback onSignUp;
   final VoidCallback onAdminLogin;
+
+  /// Opens the guest joyride. Left null by hosts that have no session to give
+  /// (the sign-up flow reuses this screen), in which case the guest pill stays
+  /// inert exactly as it was drawn.
+  final VoidCallback? onGuestLogin;
   final VoidCallback? onBack;
   final String initialEmail;
   const LoginScreen({
@@ -37,6 +42,7 @@ class LoginScreen extends StatefulWidget {
     required this.onLogin,
     required this.onSignUp,
     required this.onAdminLogin,
+    this.onGuestLogin,
     this.onBack,
     this.initialEmail = '',
   });
@@ -268,17 +274,48 @@ class _LoginScreenState extends State<LoginScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // ── language-switcher ────────────────────────────────
+                    // ── language-switcher + btn-guest ────────────────────
                     Padding(
                       padding: const EdgeInsets.fromLTRB(8, 2, 24, 0),
                       child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          if (widget.onBack != null)
-                            BackButton(
-                              color: LandingColors.text,
-                              onPressed: widget.onBack,
+                          // The pill is loose-`Flexible` so an outsized system
+                          // text scale trims its label instead of overflowing
+                          // the row; at every normal scale it takes its own
+                          // width and `spaceBetween` pushes the switcher right.
+                          Flexible(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (widget.onBack != null)
+                                  BackButton(
+                                    color: LandingColors.text,
+                                    onPressed: widget.onBack,
+                                  ),
+                                // `btn-guest` sits 24 from the page edge; the
+                                // row is inset 8 to leave room for the back
+                                // button, so the pill makes up the other 16
+                                // when there is none.
+                                Flexible(
+                                  child: Padding(
+                                    padding: EdgeInsets.only(
+                                      left: widget.onBack == null ? 16 : 0,
+                                    ),
+                                    child: _languageTransition(
+                                      child: LandingGuestPill(
+                                        key: const ValueKey<String>(
+                                          'landing-guest-login',
+                                        ),
+                                        label: S.landingGuestLogin,
+                                        onTap: widget.onGuestLogin,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          const Spacer(),
+                          ),
                           LandingLanguageToggle(
                             languageCode: localeService.languageCode,
                             onSelected: _switchLanguage,

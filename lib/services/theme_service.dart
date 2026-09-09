@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 
 import 'account_preferences_service.dart';
+import 'guest_session.dart';
 
 class ThemeService extends ChangeNotifier {
   ThemeService({
@@ -46,6 +47,13 @@ class ThemeService extends ChangeNotifier {
 
   bool? cachedThemeFor(String userId) => _themeByUser[userId];
 
+  /// Guest sessions may flip this preference for the duration of the joyride,
+  /// but must not overwrite what the device owner chose.
+  Future<void> _persist(String key, Object? value) async {
+    if (guestSession.isActive) return;
+    await _box?.put(key, value);
+  }
+
   Future<void> setDark(
     bool value, {
     bool persistToAccount = true,
@@ -53,7 +61,7 @@ class ThemeService extends ChangeNotifier {
   }) async {
     final changed = _isDark != value;
     _isDark = value;
-    await _box?.put('isDark', value);
+    await _persist('isDark', value);
     if (persistToAccount) {
       final accountId = _accountIdProvider?.call();
       if (accountId != null && accountId.isNotEmpty) {
@@ -81,7 +89,7 @@ class ThemeService extends ChangeNotifier {
     if (accountId != null && accountId.isNotEmpty && accountId != userId) {
       await _cacheTheme(accountId, dark);
     }
-    await _box?.put('isDark', dark);
+    await _persist('isDark', dark);
     notifyListeners();
   }
 
@@ -89,15 +97,15 @@ class ThemeService extends ChangeNotifier {
     final changed = _isDark != dark;
     _isDark = dark;
     await _cacheTheme(userId, dark);
-    await _box?.put('isDark', dark);
+    await _persist('isDark', dark);
     if (changed) notifyListeners();
   }
 
   Future<void> _cacheTheme(String userId, bool dark) async {
     _themeByUser[userId] = dark;
     _themedUsers.add(userId);
-    await _box?.put('themeByUser', Map<String, bool>.from(_themeByUser));
-    await _box?.put('themedUsers', _themedUsers.toList());
+    await _persist('themeByUser', Map<String, bool>.from(_themeByUser));
+    await _persist('themedUsers', _themedUsers.toList());
   }
 }
 

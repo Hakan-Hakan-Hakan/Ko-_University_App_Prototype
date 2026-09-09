@@ -7,6 +7,7 @@ import 'people_service.dart';
 import 'supabase_config.dart';
 import 'supabase_read_cache.dart';
 import 'user_state.dart';
+import 'guest_session.dart';
 
 /// Supabase Storage object paths are stable across avatar replacements. A
 /// changing query value gives Flutter's image cache and the storage CDN a new
@@ -95,6 +96,9 @@ class StudentProfileService {
   static const _lookupTtl = Duration(minutes: 10);
 
   SupabaseClient? get _client {
+    // Guest mode reuses the unconfigured-backend path: with no client every
+    // remote read/write in this service degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     if (!SupabaseConfig.isConfigured) return null;
     return Supabase.instance.client;
   }

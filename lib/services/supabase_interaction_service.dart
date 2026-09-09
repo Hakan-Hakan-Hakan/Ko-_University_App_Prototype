@@ -3,14 +3,20 @@ import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 
 import '../models/comment.dart';
+import '../models/event.dart';
 import '../models/user.dart';
 import 'feed_v2_service.dart';
 import 'people_service.dart';
 import 'supabase_config.dart';
 import 'supabase_read_cache.dart';
+import 'guest_session.dart';
+import 'mock_data.dart';
 
 class SupabaseInteractionService {
   SupabaseClient? get _client {
+    // Guest mode reuses the unconfigured-backend path: with no client every
+    // remote read/write in this service degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     if (!SupabaseConfig.isConfigured) return null;
     try {
       return Supabase.instance.client;
@@ -343,10 +349,41 @@ class SupabaseInteractionService {
     );
   }
 
+  /// Resolves an event's attendees from the in-memory registries.
+  List<User> _localEventAttendees(String eventId) {
+    if (eventId.isEmpty) return const [];
+    Event? event;
+    for (final candidate in events) {
+      if (candidate.id == eventId) {
+        event = candidate;
+        break;
+      }
+    }
+    if (event == null) return const [];
+    final byId = <String, User>{
+      for (final user in users) user.id: user,
+      for (final user in peopleService.cachedPeople) user.id: user,
+    };
+    final attendees = <User>[
+      for (final id in event.attendeeUserIds)
+        if (byId[id] != null) byId[id]!,
+    ];
+    attendees.sort(
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
+    return attendees;
+  }
+
   Future<List<User>> fetchEventAttendees(
     String eventId, {
     bool force = false,
   }) async {
+    // Guest mode answers this from the seeded world rather than returning an
+    // empty list. Callers treat a completed fetch as authoritative — the event
+    // page overwrites both its attendee list and the RSVP count with whatever
+    // comes back — so an empty answer here reads as "nobody is going".
+    if (guestSession.isActive) return _localEventAttendees(eventId);
+
     final client = _client;
     if (client == null || eventId.isEmpty) return const [];
 

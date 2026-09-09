@@ -149,8 +149,14 @@ void main() {
 
     final sticky = find.byKey(const ValueKey('event-sticky-actions'));
     expect(sticky, findsOneWidget);
-    expect(tester.getRect(sticky).bottom, closeTo(844, 0.1));
-    expect(tester.getSize(sticky).height, lessThanOrEqualTo(114));
+    // The actions float as a bare block with no panel behind them: on the
+    // page's own 20pt gutter, 12pt clear of the bottom edge, and no taller
+    // than the two rows themselves (44 + 8 + 44).
+    final stickyRect = tester.getRect(sticky);
+    expect(stickyRect.bottom, closeTo(832, 0.1));
+    expect(stickyRect.left, closeTo(20, 0.1));
+    expect(stickyRect.right, closeTo(370, 0.1));
+    expect(tester.getSize(sticky).height, lessThanOrEqualTo(100));
     final scrollView = tester.widget<SingleChildScrollView>(
       find.byType(SingleChildScrollView).first,
     );

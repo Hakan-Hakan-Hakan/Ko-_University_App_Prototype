@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 
 import 'mock_data.dart';
+import 'guest_session.dart';
 
 // ── Interest & time labels ────────────────────────────────────────────────────
 
@@ -17,6 +18,16 @@ const List<String> kInterests = [
 ];
 
 const List<String> kTimeSlots = ['Morning', 'Afternoon', 'Evening', 'Weekend'];
+
+/// Canonical identity for programme names that differ only by backend/display
+/// spelling, such as "Chemical & Biological" versus "Chemical and Biological".
+String normalizeAcademicProgramName(String program) {
+  return program
+      .trim()
+      .toLowerCase()
+      .replaceAll('&', 'and')
+      .replaceAll(RegExp(r'\s+'), ' ');
+}
 
 const List<String> kAcademicPrograms = [
   'Archaeology and History of Art',
@@ -168,6 +179,7 @@ class PersonalizationService extends ChangeNotifier {
   // ── Save ────────────────────────────────────────────────────────────────────
 
   Future<void> save(String userId) async {
+    if (guestSession.isActive) return;
     if (_box == null) return;
     await _box!.putAll({
       'ob_$userId': onboardingComplete,

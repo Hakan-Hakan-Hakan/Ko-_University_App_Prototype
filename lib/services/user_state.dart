@@ -584,6 +584,43 @@ class UserState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ── Session boundary ──────────────────────────────────────────────────────────
+
+  /// Drops every piece of per-account state this singleton holds.
+  ///
+  /// [userState] outlives any one account, so entering or leaving the guest
+  /// joyride has to empty it explicitly — otherwise the previous occupant's
+  /// likes, follows, bios and alerts bleed into the demo (and the demo's bleed
+  /// back out). Deliberately notifies once at the end rather than per field.
+  void resetForSessionBoundary() {
+    likedPostIds.clear();
+    followedClubIds.clear();
+    savedPostIds.clear();
+    followedUserIds.clear();
+    pinnedPostIds.clear();
+    profilePhotoPaths.clear();
+    remotePhotoUrls.clear();
+    _profilePhotoRevisions.clear();
+    clubPhotoPaths.clear();
+    remoteClubPhotoUrls.clear();
+    bios.clear();
+    majors.clear();
+    years.clear();
+    interests.clear();
+    minors.clear();
+    doubleMajors.clear();
+    usernames.clear();
+    pendingFollowRequests.clear();
+    shownFollowNotice.clear();
+    incomingFollowRequests.clear();
+    acceptedMessageRequests.clear();
+    dynamicNotifications.clear();
+    readNotificationIds.clear();
+    unreadNotifications = 0;
+    _followedClubsLoading = false;
+    notifyListeners();
+  }
+
   // This is a process-lifetime singleton shared by ~20+ plain
   // ListenableBuilder(listenable: userState) call sites app-wide, in
   // addition to userStateProvider below. Riverpod's ChangeNotifierProvider

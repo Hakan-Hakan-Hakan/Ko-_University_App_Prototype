@@ -11,6 +11,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../services/locale_service.dart';
 import '../data/calendar_event_model.dart';
 import '../providers/calendar_state.dart';
+import '../../../services/guest_session.dart';
 
 class CalendarResult {
   final bool success;
@@ -90,6 +91,10 @@ class CalendarService {
   }
 
   Future<CalendarResult> addEvent(CalendarEventModel model) async {
+    // The guest joyride shows this working but must leave nothing behind on
+    // the visitor's device, so no permission is requested and no event is
+    // written — the caller still gets the success it would have got.
+    if (guestSession.isActive) return const CalendarResult(success: true);
     try {
       if (Platform.isIOS) {
         return await _addEventToAppleCalendar(model);

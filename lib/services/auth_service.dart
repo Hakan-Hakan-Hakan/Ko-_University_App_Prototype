@@ -24,6 +24,8 @@ import 'admin_moderation_service.dart';
 import 'platform_admin_auth_service.dart';
 import 'session_restoration.dart';
 import 'supabase_content_service.dart';
+import 'guest_session.dart';
+import 'guest_world.dart';
 
 enum AuthLoginFailure { none, invalidCredentials, banned }
 
@@ -63,6 +65,29 @@ class AuthService {
 
   void _invalidateChatAuthBoundary() {
     _chatAuthBoundaryHandler?.call();
+  }
+
+  /// Signs the fabricated guest profile in for the read-only joyride.
+  ///
+  /// The guest is deliberately shaped as an ordinary *student* session
+  /// (`role: 'student'`, no [currentAdmin]) because roughly forty write
+  /// affordances across the app — liking, RSVPing, commenting, following
+  /// people, saved items, the Search tab — are gated on [isStudentSession].
+  /// Any other role would render the tour read-only.
+  ///
+  /// Unlike the real login paths this performs no network call and starts no
+  /// device session clock: the caller has already set `guestSession.begin()`,
+  /// so `authSessionStore`, Hive and Supabase are all closed for business.
+  void enterGuestSession() {
+    _studentHydrationGeneration++;
+    userState.setFollowedClubsLoading(false);
+    _invalidateChatAuthBoundary();
+    _currentAdmin = null;
+    _currentUser = guestSessionUser();
+    _pendingStudentProfileRow = null;
+    _activatedStudentUserId = null;
+    // No terms check: there is no authenticated Supabase user to record an
+    // acceptance against, and the gate keys off exactly that.
   }
 
   void setClubAdmin(AppAdmin admin, {bool checkTerms = true}) {
@@ -734,6 +759,23 @@ class AuthService {
     _studentHydrationGeneration++;
     userState.setFollowedClubsLoading(false);
     _invalidateChatAuthBoundary();
+
+    // The guest joyride has no Supabase session, no device session clock and
+    // no registered push device, so none of the remote teardown below applies.
+    // Tearing the fabricated world down while `guestSession` is still active
+    // is what keeps the emptying itself off disk; the flag drops last.
+    if (guestSession.isActive) {
+      _currentUser = null;
+      _currentAdmin = null;
+      _pendingStudentProfileRow = null;
+      _activatedStudentUserId = null;
+      termsAcceptanceService.clear();
+      clearGuestWorld();
+      guestSession.end();
+      lazyContentLoader.invalidate();
+      return;
+    }
+
     final wasClubUpMockSession = isClubUpMockAdmin(_currentAdmin);
     lazyContentLoader.invalidate();
     _currentUser = null;

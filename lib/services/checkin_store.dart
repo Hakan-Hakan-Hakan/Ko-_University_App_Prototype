@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 
 import 'supabase_interaction_service.dart';
+import 'guest_session.dart';
 
 /// Central event check-in state store (QR Event Pass scans + manual toggles).
 ///
@@ -39,6 +40,7 @@ class CheckinStore extends ChangeNotifier {
   }
 
   void _save() {
+    if (guestSession.isActive) return;
     final box = _box;
     if (box == null) return;
     unawaited(
@@ -116,6 +118,14 @@ class CheckinStore extends ChangeNotifier {
       set.remove(userId);
     }
     _save();
+    notifyListeners();
+  }
+
+  /// Drops in-memory check-ins at a session boundary. See
+  /// `PollStore.clearSessionState` for why this is needed.
+  void clearSessionState() {
+    _byEvent.clear();
+    _hydratedEventIds.clear();
     notifyListeners();
   }
 }

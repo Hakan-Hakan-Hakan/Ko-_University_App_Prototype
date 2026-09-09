@@ -4,6 +4,9 @@ import '../l10n/app_localizations.dart';
 import '../models/event.dart';
 import '../models/user.dart';
 import '../services/app_colors.dart';
+import '../services/app_strings.dart';
+import '../services/auth_service.dart';
+import '../services/event_attendee_visibility.dart';
 import '../services/mock_data.dart';
 import '../services/people_service.dart';
 import '../services/supabase_interaction_service.dart';
@@ -11,9 +14,12 @@ import '../services/user_state.dart';
 import '../widgets/user_avatar.dart';
 import 'user_profile_screen.dart';
 
-/// Public, profile-focused attendee list opened from the student event detail.
-/// Organizer-only RSVP timestamps and check-in state stay in the private
-/// organizer attendance screen.
+/// Profile-focused attendee list opened from the student event detail.
+///
+/// It is not a public guest list: [attendeeVisibilityFor] narrows it to the
+/// people the viewer and the attendee follow each other with. Organizer-only
+/// RSVP timestamps and check-in state stay in the private organizer attendance
+/// screen, which is also the only place the full list is shown.
 class EventAttendeeListScreen extends StatefulWidget {
   const EventAttendeeListScreen({
     super.key,
@@ -39,7 +45,23 @@ class _EventAttendeeListScreenState extends State<EventAttendeeListScreen> {
     _hydrateAttendees();
   }
 
+  /// Startup already hydrates the viewer's follow graph, but a cold deep-link
+  /// can reach this screen while that is still in flight, and the filter must
+  /// not be applied against half a graph. Kept off the attendee fetch's path:
+  /// [PeopleService] reaches straight for `Supabase.instance` and throws when
+  /// the app runs without it, which must not cost this screen its profiles.
+  Future<void> _hydrateFollowGraph() async {
+    final viewerId = authService.currentUser?.id ?? '';
+    if (viewerId.isEmpty) return;
+    try {
+      await peopleService.hydrateFollowing(viewerId);
+    } catch (_) {
+      // The one-way fallback in mutuallyFollowedUserIds() covers this.
+    }
+  }
+
   Future<void> _hydrateAttendees() async {
+    final followGraph = _hydrateFollowGraph();
     try {
       final attendees = await supabaseInteractionService.fetchEventAttendees(
         widget.event.id,
@@ -53,6 +75,8 @@ class _EventAttendeeListScreenState extends State<EventAttendeeListScreen> {
     } catch (_) {
       // The list remains useful with locally known profiles and initials.
     }
+    // Never skipped by the catch above — the filter reads this graph.
+    await followGraph;
     if (mounted) setState(() => _loading = false);
   }
 
@@ -77,11 +101,16 @@ class _EventAttendeeListScreenState extends State<EventAttendeeListScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final attendeeIds =
+    final allAttendeeIds =
         (_remoteAttendees?.map((user) => user.id) ??
                 widget.event.attendeeUserIds)
             .toSet()
             .toList();
+    final visibility = attendeeVisibilityFor(
+      widget.event,
+      attendeeIds: allAttendeeIds,
+    );
+    final attendeeIds = visibility.visibleIds;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -91,31 +120,48 @@ class _EventAttendeeListScreenState extends State<EventAttendeeListScreen> {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         titleSpacing: 0,
+        // A student gets their friends by name and no headcount at all — not
+        // even of the friends, which the list itself already shows. Only a
+        // session reading this as a guest list keeps the "N attending" line.
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              l10n.attendees,
+              visibility.friendsOnly ? S.friendsGoingTitle : l10n.attendees,
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
             ),
-            Text(
-              l10n.attendingCount(attendeeIds.length),
-              style: TextStyle(
-                color: AppColors.secondaryText,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
+            if (!visibility.friendsOnly)
+              Text(
+                l10n.attendingCount(visibility.count),
+                style: TextStyle(
+                  color: AppColors.secondaryText,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
           ],
         ),
       ),
-      body: _loading && attendeeIds.isNotEmpty
+      body: _loading && allAttendeeIds.isNotEmpty
           ? Center(child: CircularProgressIndicator(color: widget.color))
           : attendeeIds.isEmpty
           ? Center(
-              child: Text(
-                l10n.noRsvpsYet,
-                style: TextStyle(color: AppColors.secondaryText, fontSize: 15),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Text(
+                  // Three different silences: nobody has RSVP'd, none of the
+                  // viewer's friends have, or this session never gets names.
+                  !visibility.showsNames
+                      ? S.attendeesHiddenForClubs
+                      : allAttendeeIds.isEmpty
+                      ? l10n.noRsvpsYet
+                      : S.friendsGoingEmpty,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppColors.secondaryText,
+                    fontSize: 15,
+                  ),
+                ),
               ),
             )
           : ListView.separated(

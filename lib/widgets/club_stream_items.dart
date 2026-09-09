@@ -892,6 +892,7 @@ class ClubEventCard extends StatelessWidget {
     required this.t,
     required this.onToggleRsvp,
     required this.onOpen,
+    this.audienceBadge,
     this.compact = false,
   });
 
@@ -905,6 +906,11 @@ class ClubEventCard extends StatelessWidget {
   final ClubChatTheme t;
   final VoidCallback onToggleRsvp;
   final VoidCallback onOpen;
+
+  /// The `ContentAudiencePill` for a restricted event, passed in by the screen
+  /// so this stream item stays a pure presentation widget. Null when public.
+  final Widget? audienceBadge;
+
   final bool compact;
 
   @override
@@ -986,9 +992,17 @@ class ClubEventCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      S.goingCount(goingCount),
-                      style: TextStyle(fontSize: 11, color: t.sub),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          S.goingCount(goingCount),
+                          style: TextStyle(fontSize: 11, color: t.sub),
+                        ),
+                        ?audienceBadge,
+                      ],
                     ),
                   ],
                 ),

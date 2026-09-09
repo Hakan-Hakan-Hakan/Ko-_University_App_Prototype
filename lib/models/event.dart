@@ -1,3 +1,5 @@
+import 'content_audience.dart';
+
 /// Event times are displayed as local campus/device wall-clock values.
 /// Supabase `timestamptz` fields commonly arrive with `Z` or an explicit
 /// offset, so normalize them at the model boundary instead of requiring every
@@ -9,6 +11,22 @@ DateTime? tryParseEventDateTime(Object? raw) {
 }
 
 DateTime parseEventDateTime(String raw) => DateTime.parse(raw).toLocal();
+
+/// Parses `events.accent_color_hex` into a colour value, or null if it cannot.
+///
+/// Nothing in the app writes this column — it is only ever read back from
+/// Supabase — so the stored text is not guaranteed to be in any one shape.
+/// Accepts `RRGGBB`, `AARRGGBB` and a leading `#` on either, and returns null
+/// rather than throwing so a malformed row degrades to the club colour
+/// instead of taking down the event page.
+int? tryParseEventAccentColor(String? raw) {
+  final value = raw?.trim().replaceFirst(RegExp(r'^#'), '') ?? '';
+  if (value.length != 6 && value.length != 8) return null;
+  final parsed = int.tryParse(value, radix: 16);
+  if (parsed == null) return null;
+  // A 6-digit value carries no alpha; make it fully opaque.
+  return value.length == 6 ? 0xFF000000 | parsed : parsed;
+}
 
 class EventSlot {
   final DateTime time;
@@ -91,6 +109,10 @@ class Event {
   /// Featured speakers shown on the attendee detail (name, role, LinkedIn).
   final List<EventSpeaker> speakers;
 
+  /// Who this event is addressed to. See [ContentAudience] — three nested
+  /// tiers, defaulting to [ContentAudience.everyone].
+  final ContentAudience audience;
+
   Event({
     required this.id,
     required this.clubId,
@@ -110,6 +132,7 @@ class Event {
     this.registrationUrl,
     this.capacity,
     List<EventSpeaker>? speakers,
+    this.audience = ContentAudience.everyone,
   }) : rsvpTimestamps = rsvpTimestamps ?? {},
        tags = tags ?? [],
        speakers = speakers ?? const [];
@@ -133,6 +156,7 @@ class Event {
     'registrationUrl': registrationUrl,
     'capacity': capacity,
     'speakers': speakers.map((s) => s.toMap()).toList(),
+    'audience': audience.wireValue,
   };
 
   factory Event.fromMap(Map<String, dynamic> m) => Event(
@@ -169,5 +193,56 @@ class Event {
               )
               .toList()
         : const [],
+    audience: contentAudienceFromWire(m['audience']),
+  );
+
+  /// Field-wise copy.
+  ///
+  /// Several call sites rebuild an event by hand — the event-wizard edit branch,
+  /// the RSVP store, the Feed v2 adapter — and every one of them silently drops
+  /// any field it does not know about. Prefer this over a fresh [Event].
+  ///
+  /// Note this cannot null a field back out: passing `imagePath: null` keeps the
+  /// existing value rather than clearing it. Nothing needs that today.
+  Event copyWith({
+    String? id,
+    String? clubId,
+    String? title,
+    String? description,
+    DateTime? dateTime,
+    DateTime? endTime,
+    String? location,
+    List<String>? attendeeUserIds,
+    Map<String, String>? rsvpTimestamps,
+    String? imagePath,
+    String? createdByUserId,
+    List<String>? tags,
+    String? guestSpeaker,
+    List<EventSlot>? schedule,
+    String? accentColorHex,
+    String? registrationUrl,
+    int? capacity,
+    List<EventSpeaker>? speakers,
+    ContentAudience? audience,
+  }) => Event(
+    id: id ?? this.id,
+    clubId: clubId ?? this.clubId,
+    title: title ?? this.title,
+    description: description ?? this.description,
+    dateTime: dateTime ?? this.dateTime,
+    endTime: endTime ?? this.endTime,
+    location: location ?? this.location,
+    attendeeUserIds: attendeeUserIds ?? this.attendeeUserIds,
+    rsvpTimestamps: rsvpTimestamps ?? this.rsvpTimestamps,
+    imagePath: imagePath ?? this.imagePath,
+    createdByUserId: createdByUserId ?? this.createdByUserId,
+    tags: tags ?? this.tags,
+    guestSpeaker: guestSpeaker ?? this.guestSpeaker,
+    schedule: schedule ?? this.schedule,
+    accentColorHex: accentColorHex ?? this.accentColorHex,
+    registrationUrl: registrationUrl ?? this.registrationUrl,
+    capacity: capacity ?? this.capacity,
+    speakers: speakers ?? this.speakers,
+    audience: audience ?? this.audience,
   );
 }

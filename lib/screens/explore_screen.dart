@@ -7,10 +7,12 @@ import '../models/user.dart';
 import '../services/academic_year_options.dart';
 import '../services/app_strings.dart';
 import '../services/auth_service.dart';
+import '../services/guest_world.dart' show kGuestIdPrefix;
 import '../services/lazy_content_loader.dart';
 import '../services/mock_data.dart';
 import '../services/people_service.dart';
-import '../services/personalization_service.dart' show kAcademicPrograms;
+import '../services/personalization_service.dart'
+    show kAcademicPrograms, normalizeAcademicProgramName;
 import '../services/moderation_service.dart';
 import '../services/club_follow_helper.dart';
 import '../services/user_state.dart';
@@ -264,11 +266,12 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   List<String> get _majorFilterOptions {
     final options = <String>[...kAcademicPrograms];
-    final normalized = options.map((major) => major.toLowerCase()).toSet();
+    final normalized = options.map(normalizeAcademicProgramName).toSet();
     final additional = <String>[];
     for (final person in _peopleDirectory) {
       final major = userState.majors[person.id]?.trim() ?? '';
-      if (major.isNotEmpty && normalized.add(major.toLowerCase())) {
+      if (major.isNotEmpty &&
+          normalized.add(normalizeAcademicProgramName(major))) {
         additional.add(major);
       }
     }
@@ -290,14 +293,20 @@ class _ExploreScreenState extends State<ExploreScreen> {
   /// first, intersected with the major and year filters.
   List<User> get _resultPeople {
     final q = _query.toLowerCase().trim();
-    final majors = _filters.majors.map((m) => m.toLowerCase()).toSet();
+    final majors = _filters.majors.map(normalizeAcademicProgramName).toSet();
     final years = _filters.years;
 
     final matches = _peopleDirectory.where((person) {
       if (person.id == _myId || moderationService.isUserBlocked(person.id)) {
         return false;
       }
-      final major = userState.majors[person.id]?.trim().toLowerCase() ?? '';
+      // The guest joyride seeds a fabricated campus so its demo screens have
+      // activity. Those accounts must never be discoverable in the student
+      // directory.
+      if (person.id.startsWith(kGuestIdPrefix)) return false;
+      final major = normalizeAcademicProgramName(
+        userState.majors[person.id] ?? '',
+      );
       if (majors.isNotEmpty && !majors.contains(major)) return false;
       final year = userState.years[person.id]?.trim() ?? '';
       if (years.isNotEmpty && !years.contains(year)) return false;

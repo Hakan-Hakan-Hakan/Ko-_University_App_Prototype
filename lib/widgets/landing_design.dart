@@ -147,6 +147,62 @@ class LandingLanguageToggle extends StatelessWidget {
   }
 }
 
+// ── guest pill ───────────────────────────────────────────────────────────────
+
+/// `btn-guest` `631:17` — the burgundy "Continue as Guest" pill that
+/// `Login Screen New ` (`630:116`) adds to the top-left of the header band,
+/// opposite the EN | TR switcher.
+///
+/// **Deliberately inert.** The frame is a design only: the user asked for the
+/// pill to be drawn and for pressing it to lead nowhere, so there is no guest
+/// session, no route and no tap feedback behind it. [onTap] is the seam to wire
+/// it up later; while it is null the pill does not react to touch at all.
+///
+/// The frame places the pill 6pt below the switcher, which reads as a stray
+/// nudge rather than intent — it is a loose sibling of `language-switcher`
+/// rather than a child — so the two are centred on one row here.
+class LandingGuestPill extends StatelessWidget {
+  const LandingGuestPill({super.key, required this.label, this.onTap});
+
+  final String label;
+
+  /// Left null by the login screen: the design is not connected to anything.
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: const BoxDecoration(
+          color: LandingColors.accent,
+          borderRadius: BorderRadius.all(Radius.circular(999)),
+        ),
+        child: Text(
+          label,
+          maxLines: 1,
+          // The pill sizes to its label; Turkish is the longer string and
+          // still clears the switcher. The clamp is only so a very large
+          // system text scale trims rather than overflowing the row.
+          overflow: TextOverflow.ellipsis,
+          style: figtree(
+            size: 13,
+            weight: FontWeight.w600,
+            height: 16 / 13,
+            // The frame tracks the label at 0; without this the pill inherits
+            // Material's 0.25 on `bodyMedium` and widens by 4pt.
+            letterSpacing: 0,
+            // On burgundy in both themes, exactly like the Log In label.
+            color: const Color(0xFFFAFAFA),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ── fields ───────────────────────────────────────────────────────────────────
 
 /// `input-username` / `input-password` `495:21` / `495:24` — a transparent

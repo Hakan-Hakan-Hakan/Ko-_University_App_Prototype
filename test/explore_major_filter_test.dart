@@ -8,6 +8,7 @@ import 'package:flutter_application_1/services/locale_service.dart';
 import 'package:flutter_application_1/services/people_service.dart';
 import 'package:flutter_application_1/services/theme_service.dart';
 import 'package:flutter_application_1/services/user_state.dart';
+import 'package:flutter_application_1/widgets/search_filter_sheet.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -20,6 +21,7 @@ AppLocalizations get l10n =>
 
 void main() {
   const engineeringId = 'major-filter-engineering';
+  const ampersandEngineeringId = 'major-filter-ampersand-engineering';
   const economicsId = 'major-filter-economics';
   const missingMajorId = 'major-filter-missing';
 
@@ -29,6 +31,14 @@ void main() {
         id: engineeringId,
         name: 'Ada Engineering',
         email: 'ada.engineering@ku.edu.tr',
+        password: '',
+        role: 'student',
+        subscribedClubIds: const [],
+      ),
+      User(
+        id: ampersandEngineeringId,
+        name: 'Derya Chemical',
+        email: 'derya.chemical@ku.edu.tr',
         password: '',
         role: 'student',
         subscribedClubIds: const [],
@@ -59,6 +69,10 @@ void main() {
     await localeService.setLanguage('en');
     await themeService.setDark(true);
     userState.setMajor(engineeringId, 'Computer Engineering');
+    userState.setMajor(
+      ampersandEngineeringId,
+      'Chemical & Biological Engineering',
+    );
     userState.setMajor(economicsId, 'Economics');
     userState.setMajor(missingMajorId, '');
   });
@@ -206,6 +220,73 @@ void main() {
 
     expect(find.text(S.noPeopleInSelectedMajor), findsOneWidget);
     expect(find.text(S.tryAnotherMajorOrName), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('ampersand engineering majors stay in Engineering', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              key: const ValueKey('open-major-picker'),
+              onPressed: () => showSearchMajorPicker(
+                context: context,
+                selected: const {},
+                programs: const [
+                  'Chemical & Biological Engineering',
+                  'Electrical & Electronics Engineering',
+                ],
+              ),
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('open-major-picker')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ENGINEERING'), findsOneWidget);
+    expect(find.text('Chemical & Biological Engineering'), findsOneWidget);
+    expect(find.text('Electrical & Electronics Engineering'), findsOneWidget);
+    expect(find.text('ACADEMIC'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('equivalent major spellings produce one working filter', (
+    tester,
+  ) async {
+    await pumpFindPeople(tester);
+    await openFilters(tester);
+    await tester.tap(find.byKey(const ValueKey('people-major-filter')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('academic-program-picker-search')),
+      'Chemical',
+    );
+    await tester.pump();
+
+    expect(find.text('Chemical and Biological Engineering'), findsOneWidget);
+    expect(find.text('Chemical & Biological Engineering'), findsNothing);
+
+    await tester.tap(
+      find.byKey(
+        const ValueKey('academic-program-Chemical and Biological Engineering'),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('major-picker-done')));
+    await tester.pumpAndSettle();
+    await applyFilters(tester);
+
+    expect(find.text('Derya Chemical'), findsOneWidget);
+    expect(find.textContaining('1 RESULT'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

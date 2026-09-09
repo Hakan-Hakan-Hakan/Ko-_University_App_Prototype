@@ -23,6 +23,8 @@ import 'screens/language_choice_screen.dart';
 import 'screens/onboarding_carousel_screen.dart';
 import 'services/app_bootstrap.dart';
 import 'services/auth_service.dart';
+import 'services/guest_session.dart';
+import 'services/guest_world.dart';
 import 'services/mock_clubup_profile.dart';
 import 'services/hive_bootstrap.dart';
 import 'services/user_prefs_service.dart';
@@ -30,6 +32,7 @@ import 'services/chat_store.dart';
 import 'services/chat_group_prefs.dart';
 import 'services/club_chat_prefs.dart';
 import 'services/checkin_store.dart';
+import 'services/content_audience_store.dart';
 import 'services/content_store.dart';
 import 'services/user_state.dart';
 import 'services/view_tracker.dart';
@@ -234,6 +237,7 @@ void _startDeferredLocalBootstrap() {
         guarded(chatGroupPrefs.initialize()),
         guarded(checkinStore.initialize()),
         guarded(pollStore.initialize()),
+        guarded(contentAudienceStore.initialize()),
         guarded(viewTracker.initialize()),
         guarded(personalizationService.initialize()),
         guarded(calendarSyncService.initialize()),
@@ -470,6 +474,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     // opening. In particular, ContentStore uses a late box and cannot be
     // flushed until the whole deferred bootstrap succeeds.
     if (!appBootstrap.localDataReady) return;
+    // Nothing from the joyride is written, including on app pause/detach.
+    if (guestSession.isActive) return;
     final uid = authService.currentUser?.id ?? authService.currentAdmin?.id;
     if (uid != null) {
       userPrefsService.save(uid);
@@ -494,6 +500,31 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _isPreparingAccountPreferences = currentUserId != null;
     });
     unawaited(_finishLoginAfterTermsCheck(currentUserId));
+  }
+
+  /// Opens the read-only guest joyride from the landing screen's guest pill.
+  ///
+  /// Deliberately *not* routed through [_onLogin]: reaching an authenticated
+  /// state there permanently retires the intro carousel on this device, and a
+  /// visitor tapping "Guest Login" should not change what the device owner
+  /// sees on their next launch.
+  ///
+  /// Order matters. `guestSession.begin()` closes every persistence and network
+  /// gate, so it must happen before the seed world lands or any of it could
+  /// reach disk.
+  void _onGuestLogin() {
+    guestSession.begin();
+    // Identity before content, in that order. `enterGuestSession` crosses an
+    // auth boundary, which tells ChatStore to drop the previous occupant's
+    // cached conversations — seeding first would have that teardown wipe the
+    // guest's own seeded chats straight back out.
+    authService.enterGuestSession();
+    seedGuestWorld();
+    setState(() {
+      _loggedIn = true;
+      _showSignUp = false;
+      _isPreparingAccountPreferences = false;
+    });
   }
 
   bool get _termsPermitAuthenticatedAccess {
@@ -549,6 +580,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   void _activateAuthenticatedServices() {
     if (!_termsPermitAuthenticatedAccess) return;
+    // A guest has no backend account: nothing to register a push device for,
+    // no preferences to load, and no follow graph to hydrate. The seed world
+    // already supplied all of it.
+    if (guestSession.isActive) return;
     final currentUserId =
         authService.currentUser?.id ?? authService.currentAdmin?.id;
     if (currentUserId != null) {
@@ -670,6 +705,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           }
           final requiredAccountPreference =
               accountPreferencesService.nextRequiredPreference;
+          // The one-time language/theme pickers are per-account preferences
+          // written to Hive. A guest has neither, so skip straight to the app
+          // rather than making a visitor answer two setup questions first.
+          final isGuest = guestSession.isActive;
           final needsLanguagePreference =
               accountPreferencesService.hasAuthenticatedUser
               ? requiredAccountPreference == AccountPreferencePrompt.language
@@ -680,13 +719,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               ? requiredAccountPreference == AccountPreferencePrompt.theme
               : currentUserId != null &&
                     !themeService.hasChosenTheme(currentUserId);
-          if (currentUserId != null && needsLanguagePreference) {
+          if (!isGuest && currentUserId != null && needsLanguagePreference) {
             homeWidget = LanguageChoiceScreen(
               onChoose: (code) =>
                   localeService.markLanguageChosen(currentUserId, code),
             );
             destinationKey = 'language-choice';
-          } else if (currentUserId != null && needsThemePreference) {
+          } else if (!isGuest &&
+              currentUserId != null &&
+              needsThemePreference) {
             homeWidget = ThemeChoiceScreen(
               onChoose: (dark) =>
                   themeService.markThemeChosen(currentUserId, dark),
@@ -731,6 +772,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               onLogin: _onLogin,
               onSignUp: () => setState(() => _showSignUp = true),
               onAdminLogin: _onLogin,
+              onGuestLogin: _onGuestLogin,
               initialEmail: _signupEmail,
             ),
             transitionBuilder: (child, animation) =>

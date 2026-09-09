@@ -7,6 +7,7 @@ import '../models/news_post.dart';
 import 'admin_moderation_service.dart';
 import 'auth_service.dart';
 import 'supabase_config.dart';
+import 'guest_session.dart';
 
 /// Local safety state plus the authenticated Supabase moderation queue.
 ///
@@ -31,6 +32,9 @@ class ModerationService extends ChangeNotifier {
   Set<String> get blockedClubIds => Set.unmodifiable(_blockedClubIds);
 
   SupabaseClient? get _client {
+    // Guest mode reuses the unconfigured-backend path: with no client every
+    // remote read/write in this service degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     if (!SupabaseConfig.isConfigured) return null;
     try {
       return Supabase.instance.client;
@@ -325,6 +329,7 @@ class ModerationService extends ChangeNotifier {
   }
 
   Future<void> _persist() async {
+    if (guestSession.isActive) return;
     final userId = _activeUserId ?? _actorId;
     if (userId.isEmpty) return;
     final preferences = await SharedPreferences.getInstance();

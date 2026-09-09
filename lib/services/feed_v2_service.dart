@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/feed_v2.dart';
 import 'supabase_config.dart';
 import 'supabase_read_cache.dart';
+import 'guest_session.dart';
 
 abstract interface class FeedPageV2Source {
   Future<FeedPageV2> fetchPage({
@@ -15,6 +16,9 @@ abstract interface class FeedPageV2Source {
 
 class SupabaseFeedV2Service implements FeedPageV2Source {
   SupabaseClient? get _client {
+    // Guest mode reuses the unconfigured-backend path: with no client every
+    // remote read/write in this service degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     if (!SupabaseConfig.isConfigured) return null;
     try {
       return Supabase.instance.client;

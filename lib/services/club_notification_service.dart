@@ -12,6 +12,7 @@ import 'locale_service.dart';
 import 'mock_data.dart';
 import 'supabase_config.dart';
 import 'user_state.dart';
+import 'guest_session.dart';
 
 /// Generates in-app notifications for club followers when new content is published.
 ///
@@ -29,6 +30,9 @@ class ClubNotificationService {
   /// Returns the user IDs that should receive a notification for [clubId],
   /// excluding [excludeUserId] (the author/admin who created the content).
   SupabaseClient? get _client {
+    // Guest mode reuses the unconfigured-backend path: with no client every
+    // remote read/write in this service degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     if (!SupabaseConfig.isConfigured) return null;
     return Supabase.instance.client;
   }

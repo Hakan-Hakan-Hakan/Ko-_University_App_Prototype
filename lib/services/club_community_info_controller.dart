@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'mock_data.dart';
 import 'supabase_config.dart';
 import 'supabase_read_cache.dart';
+import 'guest_session.dart';
 
 /// Live information for one opened club community.
 ///
@@ -38,6 +39,9 @@ class ClubCommunityInfoController extends ChangeNotifier {
 
   SupabaseClient? get _configuredClient {
     if (!SupabaseConfig.isConfigured) return null;
+    // Guest mode reuses the no-client path: no realtime channel is opened and
+    // no RPC is issued, and the caller degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     try {
       return Supabase.instance.client;
     } catch (_) {

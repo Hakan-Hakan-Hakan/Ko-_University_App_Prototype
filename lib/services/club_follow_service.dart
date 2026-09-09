@@ -3,11 +3,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'supabase_config.dart';
 import 'supabase_read_cache.dart';
 import 'lazy_content_loader.dart';
+import 'guest_session.dart';
 
 class ClubFollowService {
   final Map<String, int> _followedClubRevisions = {};
 
   SupabaseClient? get _client {
+    // Guest mode reuses the unconfigured-backend path: with no client every
+    // remote read/write in this service degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     if (!SupabaseConfig.isConfigured) return null;
     return Supabase.instance.client;
   }

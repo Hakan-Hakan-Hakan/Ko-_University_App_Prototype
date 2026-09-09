@@ -2,6 +2,7 @@ import 'package:hive/hive.dart';
 import 'mock_data.dart';
 import 'supabase_config.dart';
 import 'user_state.dart';
+import 'guest_session.dart';
 
 /// Persists UserState to a Hive box so settings survive logout / app restarts.
 /// All keys are namespaced by userId so multiple accounts stay isolated.
@@ -20,6 +21,7 @@ class UserPrefsService {
   // ── Save ────────────────────────────────────────────────────────────────────
 
   Future<void> save(String userId) async {
+    if (guestSession.isActive) return;
     if (!_initialized) return;
     final s = userState;
 
@@ -95,12 +97,14 @@ class UserPrefsService {
 
   /// Persists a club's description globally (visible to everyone).
   Future<void> saveClubDescription(String clubId, String description) async {
+    if (guestSession.isActive) return;
     if (!_initialized) return;
     await _box.put('clubDesc_$clubId', description);
   }
 
   /// Persists a club's display name globally (visible to everyone).
   Future<void> saveClubName(String clubId, String name) async {
+    if (guestSession.isActive) return;
     if (!_initialized) return;
     await _box.put('clubName_$clubId', name);
   }
@@ -108,12 +112,14 @@ class UserPrefsService {
   /// Persists club initials for offline/mock sessions. Supabase remains the
   /// shared source of truth for configured builds.
   Future<void> saveClubInitials(String clubId, String initials) async {
+    if (guestSession.isActive) return;
     if (!_initialized) return;
     await _box.put('clubInitials_$clubId', initials);
   }
 
   /// Persists a club's category/tag summary globally (visible to everyone).
   Future<void> saveClubCategory(String clubId, String? category) async {
+    if (guestSession.isActive) return;
     if (!_initialized) return;
     if (category == null || category.trim().isEmpty) {
       await _box.delete('clubCategory_$clubId');
@@ -124,6 +130,7 @@ class UserPrefsService {
 
   /// Persists the set of pinned club post ids globally.
   Future<void> savePinnedPosts() async {
+    if (guestSession.isActive) return;
     if (!_initialized) return;
     await _box.put('pinnedPostIds', userState.pinnedPostIds.toList());
   }
@@ -201,11 +208,13 @@ class UserPrefsService {
 
   /// Persists a club's profile photo path globally (not per-user).
   Future<void> saveClubPhoto(String clubId, String path) async {
+    if (guestSession.isActive) return;
     if (!_initialized) return;
     await _box.put('clubPhotoPath_$clubId', path);
   }
 
   Future<void> removeClubPhoto(String clubId) async {
+    if (guestSession.isActive) return;
     if (!_initialized) return;
     await _box.delete('clubPhotoPath_$clubId');
   }

@@ -11,6 +11,7 @@ import '../services/account_switcher_service.dart';
 import '../l10n/app_localizations.dart';
 import '../services/locale_service.dart';
 import '../services/theme_service.dart';
+import '../services/content_visibility.dart';
 import '../services/content_store.dart';
 import '../services/mock_data.dart';
 import '../services/auth_service.dart';
@@ -27,14 +28,16 @@ import '../services/personalization_service.dart';
 import '../services/post_like_helper.dart';
 import '../services/view_tracker.dart';
 import '../onboarding/onboarding_anchors.dart';
+import '../widgets/content_audience_sheet.dart';
 import '../widgets/club_avatar.dart';
 import '../widgets/club_follow_button.dart';
 import '../widgets/event_cover_image.dart';
 import '../widgets/loading_skeleton.dart';
-import '../widgets/media_scrim.dart';
+import '../widgets/dynamic_contrast_text.dart';
 import '../widgets/user_follow_button.dart';
 import '../theme/app_semantic_colors.dart';
 import '../models/share.dart';
+import '../models/content_audience.dart';
 import '../models/news_post.dart';
 import '../models/event.dart';
 import '../models/user.dart';
@@ -270,6 +273,7 @@ class _FeedScreenState extends State<FeedScreen> {
             .where(
               (e) =>
                   !moderationService.isClubBlocked(e.clubId) &&
+                  canViewEvent(e) &&
                   e.dateTime.isAfter(now.subtract(const Duration(hours: 2))) &&
                   e.dateTime.isBefore(weekEnd),
             )
@@ -325,6 +329,7 @@ class _FeedScreenState extends State<FeedScreen> {
         .where((post) => _clubById(post.clubId) != null)
         .where((post) => _clubVisible(post.clubId))
         .where((post) => !moderationService.isPostHidden(post))
+        .where(canViewPost)
         .map(
           (post) => _FeedItem(
             id: post.id,
@@ -440,7 +445,12 @@ class _FeedScreenState extends State<FeedScreen> {
               .whereType<Event>()
         : events;
     final eligible = eventSource
-        .where((e) => e.dateTime.isAfter(cutoff) && e.endTime.isAfter(now))
+        .where(
+          (e) =>
+              canViewEvent(e) &&
+              e.dateTime.isAfter(cutoff) &&
+              e.endTime.isAfter(now),
+        )
         .toList();
     if (eligible.isEmpty) return null;
     eligible.sort((a, b) {
@@ -2625,6 +2635,14 @@ class _TrendingEventCard extends StatelessWidget {
                       ],
                     ),
                   ],
+                  if (audienceForEvent(event) != ContentAudience.everyone) ...[
+                    const SizedBox(height: 10),
+                    ContentAudiencePill(
+                      key: ValueKey('content-audience-pill-${event.id}'),
+                      audience: audienceForEvent(event),
+                      accent: color,
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -3583,11 +3601,28 @@ class _PostCardState extends State<_PostCard>
       );
   }
 
+  Future<void> _changePostAudience() async {
+    final picked = await showContentAudienceSheet(
+      context,
+      current: audienceForPost(widget.post),
+      surface: AppColors.card,
+      border: AppColors.divider,
+      text: AppColors.text,
+      muted: AppColors.secondaryText,
+      accent: AppColors.primaryRed,
+    );
+    if (!mounted || picked == null) return;
+    await updatePostAudience(widget.post, picked);
+  }
+
   void _showPostOptions() {
     final canDelete = contentStore.canDeletePost(
       widget.post.id,
       authService.currentAdmin?.id ?? '',
     );
+    // There is no post editor in this app, so retargeting an already-published
+    // post lives here rather than behind an edit screen.
+    final canRetarget = canChooseAudienceForClub(widget.post.clubId);
 
     showModalBottomSheet<void>(
       context: context,
@@ -3632,6 +3667,12 @@ class _PostCardState extends State<_PostCard>
                 ),
               ),
               const SizedBox(height: 8),
+              if (canRetarget)
+                tile(
+                  icon: Icons.visibility_outlined,
+                  label: S.audienceChangeAction,
+                  onTap: () => unawaited(_changePostAudience()),
+                ),
               if (canDelete)
                 tile(
                   icon: Icons.delete_outline_rounded,
@@ -3882,6 +3923,18 @@ class _PostCardState extends State<_PostCard>
               ),
             ],
           ),
+          // ── Audience badge — only for restricted posts ──
+          if (audienceForPost(widget.post) != ContentAudience.everyone) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ContentAudiencePill(
+                key: ValueKey('content-audience-pill-${widget.post.id}'),
+                audience: audienceForPost(widget.post),
+                accent: clubColor,
+              ),
+            ),
+          ],
           // ── Announcement banner ──
           if (widget.post.isAnnouncement) ...[
             const SizedBox(height: 8),
@@ -4297,7 +4350,17 @@ class _EventCardState extends State<_EventCard> {
                     cacheWidth: 700,
                     cacheHeight: 320,
                   ),
-                  const MediaScrim(position: MediaScrimPosition.bottom),
+                  // The badge goes over the banner rather than into the
+                  // header row: this card's header already carries the club
+                  // name, the days-away label and a follow button.
+                  Positioned(
+                    left: 16,
+                    top: 12,
+                    child: ContentAudiencePill.onMedia(
+                      key: ValueKey('content-audience-pill-${widget.event.id}'),
+                      audience: audienceForEvent(widget.event),
+                    ),
+                  ),
                   // Big date in background
                   Positioned(
                     right: 16,
@@ -4319,38 +4382,16 @@ class _EventCardState extends State<_EventCard> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        // Date chip
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: context.semanticColors.onMedia.withValues(
-                              alpha: 0.2,
-                            ),
-                            borderRadius: BorderRadius.all(Radius.circular(20)),
-                          ),
-                          child: Text(
-                            '${_monthAbbr(dt.month)} ${dt.day}  ·  ${_fmt12(dt)}',
-                            style: TextStyle(
-                              color: context.semanticColors.onMedia,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                        DynamicContrastText(
+                          '${_monthAbbr(dt.month)} ${dt.day}  ·  ${_fmt12(dt)}',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
                         ),
                         const SizedBox(height: 8),
-                        Text(
+                        DynamicContrastText(
                           widget.event.title,
-                          style: TextStyle(
-                            color: context.semanticColors.onMedia,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            shadows: [
-                              Shadow(blurRadius: 4, color: Colors.black45),
-                            ],
-                          ),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
                         ),
                       ],
                     ),
@@ -4659,33 +4700,24 @@ class _EventRailCardState extends State<_EventRailCard> {
                     cacheWidth: 440,
                     cacheHeight: 220,
                   ),
-                  const MediaScrim(position: MediaScrimPosition.top),
                   Positioned(
                     left: 9,
                     top: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.68),
-                        borderRadius: BorderRadius.all(Radius.circular(999)),
-                        border: Border.all(
-                          color: context.semanticColors.onMedia.withValues(
-                            alpha: 0.14,
-                          ),
-                        ),
-                      ),
-                      child: Text(
-                        dateTimeLabel,
-                        style: TextStyle(
-                          color: context.semanticColors.onMedia,
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.1,
-                        ),
-                      ),
+                    child: DynamicContrastText(
+                      dateTimeLabel,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.1,
+                    ),
+                  ),
+                  // The text area below is a fixed 70px holding a title and a
+                  // location line, so the badge goes on the cover instead.
+                  Positioned(
+                    right: 9,
+                    top: 8,
+                    child: ContentAudiencePill.onMedia(
+                      key: ValueKey('content-audience-pill-${ev.id}'),
+                      audience: audienceForEvent(ev),
                     ),
                   ),
                 ],

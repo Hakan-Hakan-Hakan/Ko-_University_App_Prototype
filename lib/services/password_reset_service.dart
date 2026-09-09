@@ -5,6 +5,7 @@ import '../l10n/app_localizations.dart';
 import 'locale_service.dart';
 import 'rate_limit_error.dart';
 import 'supabase_config.dart';
+import 'guest_session.dart';
 
 class PasswordResetResult {
   final bool success;
@@ -27,6 +28,9 @@ class PasswordResetService {
       lookupAppLocalizations(Locale(localeService.languageCode));
 
   SupabaseClient? get _client {
+    // Guest mode reuses the unconfigured-backend path: with no client every
+    // remote read/write in this service degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     if (!SupabaseConfig.isConfigured) return null;
     return Supabase.instance.client;
   }

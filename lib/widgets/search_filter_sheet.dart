@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
+import '../services/personalization_service.dart'
+    show normalizeAcademicProgramName;
 import 'search_design.dart';
 
 /// Which side of the directory the query runs against — the "Search In" cards
@@ -771,16 +773,29 @@ class _SearchMajorPickerState extends State<_SearchMajorPicker> {
     final claimed = <String>{};
 
     for (final entry in kProgramColleges.entries) {
-      final items = entry.value
-          .where((p) => widget.programs.contains(p) && matches(p))
+      final collegePrograms = entry.value
+          .map(normalizeAcademicProgramName)
+          .toSet();
+      final items = widget.programs
+          .where(
+            (program) =>
+                collegePrograms.contains(
+                  normalizeAcademicProgramName(program),
+                ) &&
+                matches(program),
+          )
           .toList();
-      claimed.addAll(entry.value);
+      claimed.addAll(collegePrograms);
       if (items.isNotEmpty) grouped[entry.key] = items;
     }
 
     final other =
         widget.programs
-            .where((p) => !claimed.contains(p) && matches(p))
+            .where(
+              (program) =>
+                  !claimed.contains(normalizeAcademicProgramName(program)) &&
+                  matches(program),
+            )
             .toList()
           ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     if (other.isNotEmpty) {

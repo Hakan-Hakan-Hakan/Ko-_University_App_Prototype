@@ -5,6 +5,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'supabase_config.dart';
+import 'guest_session.dart';
 
 typedef AppUpdateConfigRowLoader = Future<Map<String, dynamic>?> Function();
 typedef InstalledAppInfoLoader = Future<InstalledAppInfo?> Function();
@@ -126,6 +127,9 @@ class AppUpdateService {
   }
 
   SupabaseClient? get _client {
+    // Guest mode reuses the unconfigured-backend path: with no client every
+    // remote read/write in this service degrades to its existing local no-op.
+    if (guestSession.isActive) return null;
     final clientProvider = _clientProvider;
     if (clientProvider != null) return clientProvider();
     if (!SupabaseConfig.isConfigured) return null;

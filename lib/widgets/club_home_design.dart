@@ -32,6 +32,9 @@ import 'expandable_post_caption.dart';
 import 'home_comments_sheet.dart';
 import 'home_share_sheet.dart';
 import 'poll_card.dart';
+import '../models/content_audience.dart';
+import '../services/content_visibility.dart';
+import 'content_audience_sheet.dart';
 
 /// The CLUB HOME area of the ClubUp-Desings handoff — `home-feed-alt-light` /
 /// `home-feed-alt-dark` (Figma `272:31` / `272:200`, with the typed-composer
@@ -969,6 +972,15 @@ class _ClubHomeFeedPostCardState extends State<ClubHomeFeedPostCard>
               children: [
                 if (widget.post.isAnnouncement) ...[
                   _announcementChip(),
+                  const SizedBox(height: 12),
+                ],
+                if (audienceForPost(widget.post) !=
+                    ContentAudience.everyone) ...[
+                  ContentAudiencePill(
+                    key: ValueKey('content-audience-pill-${widget.post.id}'),
+                    audience: audienceForPost(widget.post),
+                    accent: ClubHomeColors.accent,
+                  ),
                   const SizedBox(height: 12),
                 ],
                 if (body.isNotEmpty)

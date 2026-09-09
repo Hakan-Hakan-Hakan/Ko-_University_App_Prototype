@@ -10,11 +10,13 @@ import '../models/chat_message.dart';
 import '../models/event.dart';
 import '../models/user.dart';
 import '../services/app_colors.dart';
+import '../services/app_strings.dart';
 import '../services/account_switcher_service.dart';
 import '../services/auth_service.dart';
 import '../services/club_admin_access.dart';
 import '../services/club_follow_helper.dart';
 import '../services/content_store.dart';
+import '../services/event_attendee_visibility.dart';
 import '../services/locale_service.dart';
 import '../services/media_delivery_service.dart';
 import '../services/mock_data.dart';
@@ -40,6 +42,9 @@ import 'club_profile_screen.dart';
 import 'create_event_screen.dart';
 import 'event_attendee_list_screen.dart';
 import 'user_profile_screen.dart';
+import '../models/content_audience.dart';
+import '../services/content_visibility.dart';
+import '../widgets/content_audience_sheet.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Event detail — recreation of the "Event Information" design handoff.
@@ -88,7 +93,10 @@ class EventDetailScreen extends StatefulWidget {
 
 class _EventDetailScreenState extends State<EventDetailScreen> {
   static const int _quickInviteSlotCount = 5;
-  static const double _stickyCtaScrollClearance = 154;
+  // The bare floating actions are 44 + 8 + 44 tall plus a 12pt bottom margin,
+  // so 108 clears them; the rest is breathing room, as it was when this was a
+  // docked bar.
+  static const double _stickyCtaScrollClearance = 150;
 
   final Set<String> _invitedFriendIds = {};
   final List<String> _quickInviteFriendIds = [];
@@ -335,9 +343,10 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     }
   }
 
-  Color get _accent => _event.accentColorHex != null
-      ? Color(int.parse('FF${_event.accentColorHex}', radix: 16))
-      : widget.color;
+  Color get _accent {
+    final accent = tryParseEventAccentColor(_event.accentColorHex);
+    return accent == null ? widget.color : Color(accent);
+  }
 
   // ── Actions ─────────────────────────────────────────────────────────────────
   void _toggleSaved() {
@@ -708,15 +717,22 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                     child: ListenableBuilder(
                       listenable: rsvpStore,
                       builder: (_, _) {
-                        return _AttendingCard(
-                          attendees: _attendees,
+                        // A student only ever learns about the attendees they
+                        // follow each other with — names, faces and headcount
+                        // alike. See [attendeeVisibilityFor].
+                        final visibility = attendeeVisibilityFor(
+                          _event,
+                          attendeeIds: _attendees.map((user) => user.id),
                           totalCount: _rsvpCount,
-                          followedCount: _attendees
-                              .where(
-                                (user) => userState.isFollowingUser(user.id),
-                              )
-                              .length,
-                          onTap: _openAttendees,
+                        );
+                        return _AttendingCard(
+                          // The viewer's own RSVP counts towards "going" but is
+                          // not one of the people they follow.
+                          followedUserIds: visibility.visibleIds
+                              .where((id) => id != _currentSessionId)
+                              .toList(growable: false),
+                          count: visibility.count,
+                          onTap: visibility.showsNames ? _openAttendees : null,
                         );
                       },
                     ),
@@ -1714,14 +1730,35 @@ class _Hero extends StatelessWidget {
                 ),
               ),
             ),
-            if (isLive || isPast)
+            // The status pill and the audience badge share one row so a
+            // restricted live event does not stack two pills on the same spot.
+            if (isLive ||
+                isPast ||
+                audienceForEvent(event) != ContentAudience.everyone)
               Positioned(
                 left: 20,
                 bottom: 16,
-                child: _StatusPill(
-                  isLive: isLive,
-                  isPast: isPast,
-                  accent: accent,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isLive || isPast)
+                      _StatusPill(
+                        isLive: isLive,
+                        isPast: isPast,
+                        accent: accent,
+                      ),
+                    if ((isLive || isPast) &&
+                        audienceForEvent(event) != ContentAudience.everyone)
+                      const SizedBox(width: 8),
+                    // The media variant: a 10% wash of the club accent is
+                    // invisible over an arbitrary cover photo, and this badge
+                    // sits directly beside `_StatusPill`, which solved the
+                    // same problem with a scrim and white text.
+                    ContentAudiencePill.onMedia(
+                      key: ValueKey('content-audience-pill-${event.id}'),
+                      audience: audienceForEvent(event),
+                    ),
+                  ],
                 ),
               ),
           ],
@@ -2819,70 +2856,80 @@ class _SpeakersRow extends StatelessWidget {
 // Event social sections — attendees and friend invitations
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// The "friends going" row on the student event detail.
+///
+/// [followedUserIds] are the attendees this viewer may see — everyone else is
+/// already filtered out by [attendeeVisibilityFor]. A student is shown no
+/// number at all here, only the faces and the label, so [count] survives
+/// purely as the fallback for a viewer with no faces to show: a club that gets
+/// the headcount alone, or a student who is the one person they can see going.
+/// Faces are therefore only ever present for a student — the hosting club
+/// never reaches this widget, since `build` hands it `ClubEventAdminScreen`.
+/// [onTap] is null when the list cannot be opened, which also drops the
+/// chevron.
 class _AttendingCard extends StatelessWidget {
   const _AttendingCard({
-    required this.attendees,
-    required this.totalCount,
-    required this.followedCount,
+    required this.followedUserIds,
+    required this.count,
     required this.onTap,
   });
 
-  final List<User> attendees;
-  final int totalCount;
-  final int followedCount;
-  final VoidCallback onTap;
+  final List<String> followedUserIds;
+  final int count;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    if (totalCount == 0 && attendees.isEmpty) return const SizedBox.shrink();
+    if (count == 0 && followedUserIds.isEmpty) return const SizedBox.shrink();
 
     return GestureDetector(
+      key: const ValueKey('event-attending-card'),
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          if (followedCount > 0)
-            Row(
-              children: [
-                _DetailAvatarStack(
-                  userIds: attendees.map((u) => u.id).toList(),
+          if (followedUserIds.isNotEmpty) ...[
+            _DetailAvatarStack(userIds: followedUserIds),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                followedUserIds.length == 1
+                    ? S.oneFriendGoingLabel
+                    : S.friendsGoingLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: figtree(
+                  size: 13,
+                  weight: FontWeight.w700,
+                  // Primary text, not the accent the frame draws: white on the
+                  // dark card, and still legible on the light one, where a
+                  // literal white would vanish.
+                  color: ClubUpColors.text,
                 ),
-                const SizedBox(width: 10),
-                Flexible(
-                  child: Text(
-                    l10n.peopleYouFollowCount(followedCount),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: figtree(
-                      size: 13,
-                      weight: FontWeight.w700,
-                      color: ClubUpColors.accentText,
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
-          if (followedCount > 0) const SizedBox(height: 8),
-          Row(
-            children: [
-              Text(
-                l10n.goingCount(totalCount),
+          ] else
+            Flexible(
+              child: Text(
+                l10n.goingCount(count),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: figtree(
                   size: 13,
                   weight: FontWeight.w600,
                   color: ClubUpColors.muted,
                 ),
               ),
-              const SizedBox(width: 4),
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 14,
-                color: ClubUpColors.muted,
-              ),
-            ],
-          ),
+            ),
+          if (onTap != null) ...[
+            const SizedBox(width: 4),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 14,
+              color: ClubUpColors.muted,
+            ),
+          ],
         ],
       ),
     );
@@ -3381,103 +3428,98 @@ class _StickyCtaState extends State<_StickyCta> {
     final userId =
         authService.currentUser?.id ?? authService.currentAdmin?.id ?? '';
 
-    return Container(
-      key: const ValueKey('event-sticky-actions'),
-      decoration: BoxDecoration(
-        color: ClubUpColors.card,
-        border: Border(top: BorderSide(color: ClubUpColors.border)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0F000000),
-            offset: Offset(0, -4),
-            blurRadius: 8,
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListenableBuilder(
-                listenable: rsvpStore,
-                builder: (_, _) {
-                  final attending = rsvpStore.isAttending(widget.event.id);
-                  final pending = rsvpStore.isPending(widget.event.id);
-                  return GestureDetector(
-                    onTap: pending || userId.isEmpty
-                        ? null
-                        : () {
-                            HapticFeedback.selectionClick();
-                            unawaited(
-                              rsvpStore.toggle(
-                                widget.event.id,
-                                userId,
-                                event: widget.event,
-                              ),
-                            );
-                          },
-                    child: AnimatedContainer(
-                      key: const ValueKey('event-rsvp-action'),
-                      duration: const Duration(milliseconds: 180),
-                      width: double.infinity,
-                      constraints: const BoxConstraints(minHeight: 44),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
+    // The three actions float as a bare block — no panel, no fill, no blur and
+    // no shadow behind them. Each pill carries its own opaque fill and
+    // hairline, so they stay legible over whatever scrolls past. Inset to the
+    // page's own 20pt gutter so they line up with the content above.
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+        child: Column(
+          key: const ValueKey('event-sticky-actions'),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListenableBuilder(
+              listenable: rsvpStore,
+              builder: (_, _) {
+                final attending = rsvpStore.isAttending(widget.event.id);
+                final pending = rsvpStore.isPending(widget.event.id);
+                return GestureDetector(
+                  onTap: pending || userId.isEmpty
+                      ? null
+                      : () {
+                          HapticFeedback.selectionClick();
+                          unawaited(
+                            rsvpStore.toggle(
+                              widget.event.id,
+                              userId,
+                              event: widget.event,
+                            ),
+                          );
+                        },
+                  child: AnimatedContainer(
+                    key: const ValueKey('event-rsvp-action'),
+                    duration: const Duration(milliseconds: 180),
+                    width: double.infinity,
+                    constraints: const BoxConstraints(minHeight: 44),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      // The "Going" state was transparent, which read
+                      // as the old bar's own fill behind it. With no
+                      // panel there it has to paint that fill itself,
+                      // or the page shows through the pill.
+                      color: attending
+                          ? ClubUpColors.card
+                          : ClubUpColors.accent,
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(
                         color: attending
-                            ? Colors.transparent
-                            : ClubUpColors.accent,
-                        borderRadius: BorderRadius.circular(22),
-                        border: Border.all(
-                          color: attending
-                              ? ClubUpColors.accent
-                              : Colors.transparent,
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Text(
-                        attending ? l10n.going : l10n.imGoing,
-                        style: figtree(
-                          size: 14,
-                          weight: FontWeight.w700,
-                          color: attending
-                              ? ClubUpColors.accentText
-                              : Colors.white,
-                        ),
+                            ? ClubUpColors.accent
+                            : Colors.transparent,
+                        width: 1.5,
                       ),
                     ),
-                  );
-                },
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: AddToCalendarButton(
-                      key: const ValueKey('event-add-to-calendar-action'),
-                      event: widget.event,
-                      color: widget.accent,
+                    child: Text(
+                      attending ? l10n.going : l10n.imGoing,
+                      style: figtree(
+                        size: 14,
+                        weight: FontWeight.w700,
+                        color: attending
+                            ? ClubUpColors.accentText
+                            : Colors.white,
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _SecondaryActionButton(
-                      key: const ValueKey('event-reminder-action'),
-                      icon: _remind
-                          ? Icons.notifications_active_rounded
-                          : Icons.notifications_none_rounded,
-                      label: l10n.remindMe,
-                      active: _remind,
-                      onTap: _toggleRemind,
-                    ),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: AddToCalendarButton(
+                    key: const ValueKey('event-add-to-calendar-action'),
+                    event: widget.event,
+                    color: widget.accent,
                   ),
-                ],
-              ),
-            ],
-          ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _SecondaryActionButton(
+                    key: const ValueKey('event-reminder-action'),
+                    icon: _remind
+                        ? Icons.notifications_active_rounded
+                        : Icons.notifications_none_rounded,
+                    label: l10n.remindMe,
+                    active: _remind,
+                    onTap: _toggleRemind,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

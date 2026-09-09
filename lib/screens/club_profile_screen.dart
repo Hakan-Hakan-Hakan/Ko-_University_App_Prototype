@@ -45,6 +45,9 @@ import 'post_detail_screen.dart';
 import 'user_profile_screen.dart';
 import 'create_post_screen.dart' show buildPostBanner;
 import '../widgets/user_avatar.dart';
+import '../models/content_audience.dart';
+import '../services/content_visibility.dart';
+import '../widgets/content_audience_sheet.dart';
 
 bool _isDarkClubTheme(BuildContext context) =>
     Theme.of(context).brightness == Brightness.dark;
@@ -150,12 +153,16 @@ class _ClubProfileScreenState extends State<ClubProfileScreen>
 
   // Posts by this club
   List get _clubPosts =>
-      newsPosts.where((p) => p.clubId == widget.club.id).toList()
+      newsPosts
+          .where((p) => p.clubId == widget.club.id && canViewPost(p))
+          .toList()
         ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
   // Events by this club
   List<Event> get _clubEvents =>
-      events.where((e) => e.clubId == widget.club.id).toList()
+      events
+          .where((e) => e.clubId == widget.club.id && canViewEvent(e))
+          .toList()
         ..sort((a, b) => a.dateTime.compareTo(b.dateTime));
 
   /// True when the currently logged-in admin is the admin of THIS club.
@@ -1639,7 +1646,9 @@ class _EventsTabState extends State<_EventsTab> {
     );
     if (!mounted) return;
     setState(() {
-      _loadedPastEvents = fetched;
+      // This is a targeted query, so it never passes through _clubEvents and
+      // needs the audience filter applied on its own.
+      _loadedPastEvents = fetched.where(canViewEvent).toList();
       _pastLoaded = true;
       _loadingPast = false;
     });
@@ -2019,6 +2028,16 @@ class _EventCardV2 extends StatelessWidget {
           : isPast
           ? loc.past
           : null,
+      // The club's own events list is where a board member checks who a
+      // restricted event actually went out to.
+      audienceBadge: audienceForEvent(typed) == ContentAudience.everyone
+          ? null
+          : ContentAudiencePill(
+              key: ValueKey('content-audience-pill-${typed.id}'),
+              audience: audienceForEvent(typed),
+              accent: ClubProfileColors.accent,
+              foreground: ClubProfileColors.accentText,
+            ),
       // A club cannot RSVP its own event, so its label reads View / Recap.
       // A student's reads what the frame drew — the same three-way label the
       // legacy card used. The tap opens the event either way; the RSVP itself

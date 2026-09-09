@@ -5,6 +5,7 @@ import 'package:hive/hive.dart';
 
 import '../models/news_post.dart';
 import 'supabase_interaction_service.dart';
+import 'guest_session.dart';
 
 /// Central poll-vote state store, keyed by post id.
 ///
@@ -46,6 +47,7 @@ class PollStore extends ChangeNotifier {
   }
 
   void _save() {
+    if (guestSession.isActive) return;
     final box = _box;
     if (box == null) return;
     unawaited(
@@ -189,6 +191,18 @@ class PollStore extends ChangeNotifier {
       _save();
       notifyListeners();
     }
+  }
+
+  /// Drops in-memory votes at a session boundary.
+  ///
+  /// Guest votes never reach Hive (see [_save]), but these maps outlive the
+  /// session, so without this a guest's votes would still be showing after
+  /// they log out and a real account signs in on the same process.
+  void clearSessionState() {
+    _votes.clear();
+    _feedOptionCounts.clear();
+    _hydratedPostIds.clear();
+    notifyListeners();
   }
 }
 

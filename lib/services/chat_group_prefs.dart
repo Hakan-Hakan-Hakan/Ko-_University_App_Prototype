@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
+import 'guest_session.dart';
 
 /// Per-device state the CHATS handoff asks for but the data model has no field
 /// for: a group's description and the starred/favourite flag on a thread.
@@ -96,6 +97,7 @@ class ChatGroupPrefs extends ChangeNotifier {
   }
 
   void _persist(String key, Object value) {
+    if (guestSession.isActive) return;
     final box = _box;
     if (box != null) unawaited(box.put(key, value));
     notifyListeners();
